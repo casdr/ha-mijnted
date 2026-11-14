@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
+import probatio
 from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
@@ -24,7 +24,6 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 from homeassistant.util import dt as dt_util
-import probatio
 
 from .api import (
     MijntedAuthError,
@@ -39,7 +38,11 @@ from .const import (
     MAX_UPDATE_INTERVAL_HOURS,
     MIN_UPDATE_INTERVAL_HOURS,
 )
-from .coordinator import MijntedConfigEntry
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from .coordinator import MijntedConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,10 +55,14 @@ PASSWORD_SELECTOR = TextSelector(
 
 
 async def validate_credentials(hass: HomeAssistant, email: str, password: str) -> str:
-    """Sign in once and check the account has residential units. Returns the account id."""
-    session = async_create_clientsession(hass, auto_cleanup=False, cookie_jar=aiohttp.CookieJar())
+    """Sign in once, check for residential units and return the account id."""
+    session = async_create_clientsession(
+        hass, auto_cleanup=False, cookie_jar=aiohttp.CookieJar()
+    )
     try:
-        client = MijntedClient(session, email, password, dt_util.get_default_time_zone())
+        client = MijntedClient(
+            session, email, password, dt_util.get_default_time_zone()
+        )
         account_id = await client.async_sign_in()
         if not await client.async_get_residential_unit_ids():
             raise NoResidentialUnitsError
@@ -82,7 +89,7 @@ async def _errors_for(
         return None, {"base": "cannot_connect"}
     except NoResidentialUnitsError:
         return None, {"base": "no_residential_units"}
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         _LOGGER.exception("Unexpected error while validating mijnTED credentials")
         return None, {"base": "unknown"}
 
@@ -92,12 +99,16 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Ask for e-mail and password."""
         errors: dict[str, str] = {}
         if user_input is not None:
             email = user_input[CONF_EMAIL].strip()
-            account_id, errors = await _errors_for(self.hass, email, user_input[CONF_PASSWORD])
+            account_id, errors = await _errors_for(
+                self.hass, email, user_input[CONF_PASSWORD]
+            )
             if account_id:
                 await self.async_set_unique_id(account_id)
                 self._abort_if_unique_id_configured()
@@ -119,7 +130,10 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+    async def async_step_reauth(
+        self,
+        _entry_data: Mapping[str, Any],
+    ) -> ConfigFlowResult:
         """Start reauthentication after the portal rejected the stored credentials."""
         return await self.async_step_reauth_confirm()
 
@@ -141,7 +155,9 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=probatio.Schema({probatio.Required(CONF_PASSWORD): PASSWORD_SELECTOR}),
+            data_schema=probatio.Schema(
+                {probatio.Required(CONF_PASSWORD): PASSWORD_SELECTOR}
+            ),
             description_placeholders={"email": entry.data[CONF_EMAIL]},
             errors=errors,
         )
@@ -154,14 +170,19 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             email = user_input[CONF_EMAIL].strip()
-            account_id, errors = await _errors_for(self.hass, email, user_input[CONF_PASSWORD])
+            account_id, errors = await _errors_for(
+                self.hass, email, user_input[CONF_PASSWORD]
+            )
             if account_id:
                 await self.async_set_unique_id(account_id)
                 self._abort_if_unique_id_mismatch(reason="wrong_account")
                 return self.async_update_reload_and_abort(
                     entry,
                     title=email,
-                    data_updates={CONF_EMAIL: email, CONF_PASSWORD: user_input[CONF_PASSWORD]},
+                    data_updates={
+                        CONF_EMAIL: email,
+                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                    },
                 )
         return self.async_show_form(
             step_id="reconfigure",
@@ -172,14 +193,20 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
                         probatio.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
                     }
                 ),
-                {CONF_EMAIL: user_input[CONF_EMAIL] if user_input else entry.data[CONF_EMAIL]},
+                {
+                    CONF_EMAIL: user_input[CONF_EMAIL]
+                    if user_input
+                    else entry.data[CONF_EMAIL]
+                },
             ),
             errors=errors,
         )
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: MijntedConfigEntry) -> MijntedOptionsFlow:
+    def async_get_options_flow(
+        config_entry: MijntedConfigEntry,  # noqa: ARG004 - Home Assistant's signature
+    ) -> MijntedOptionsFlow:
         """Return the options flow."""
         return MijntedOptionsFlow()
 
@@ -187,7 +214,9 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
 class MijntedOptionsFlow(OptionsFlowWithReload):
     """Options: update interval."""
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Set the update interval in hours."""
         if user_input is not None:
             return self.async_create_entry(

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 import logging
+from datetime import date, timedelta
+from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -32,6 +32,9 @@ from .const import (
 from .models import Meter, MijntedData, ResidentialUnitInfo
 from .statistics import async_import_meter_statistics
 
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
 _LOGGER = logging.getLogger(__name__)
 
 type MijntedConfigEntry = ConfigEntry[MijntedCoordinator]
@@ -46,6 +49,11 @@ def season_year(periods: list[BillingPeriod], today: date) -> int:
         if period.start <= today <= period.end:
             return period.end.year
     return today.year + 1 if today.month >= 6 else today.year
+
+
+def _days_between(first: date, last: date) -> list[date]:
+    """Every day from `first` up to and including `last`, if any."""
+    return [first + timedelta(days=offset) for offset in range((last - first).days + 1)]
 
 
 class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
@@ -68,8 +76,8 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
         )
         self.client = client
         self._failures = 0
-        # Per residential unit: days before the last readout. Those values are final, so they are
-        # fetched once and kept for as long as they stay in the history window.
+        # Per residential unit: days before the last readout. Those values are final, so
+        # they are fetched once and kept for as long as they stay in the history window.
         self._final_days: dict[int, dict[date, dict[str, float]]] = {}
 
     async def _async_update_data(self) -> MijntedData:
@@ -90,7 +98,10 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
                 is_fixable=False,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key=ISSUE_UNEXPECTED_PAGE,
-                translation_placeholders={"step": err.step, "title": self.config_entry.title},
+                translation_placeholders={
+                    "step": err.step,
+                    "title": self.config_entry.title,
+                },
             )
             raise ConfigEntryError(
                 translation_domain=DOMAIN,
@@ -99,7 +110,9 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
             ) from err
         except MijntedConnectionError as err:
             self._failures += 1
-            self.update_interval = min(self._base_interval * 2**self._failures, MAX_BACKOFF)
+            self.update_interval = min(
+                self._base_interval * 2**self._failures, MAX_BACKOFF
+            )
             raise UpdateFailed(
                 translation_domain=DOMAIN,
                 translation_key="cannot_connect",
@@ -128,7 +141,9 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
                     is_fixable=False,
                     severity=ir.IssueSeverity.WARNING,
                     translation_key=ISSUE_EXPORT_DISABLED,
-                    translation_placeholders={"apartment": unit.apartment_no or str(unit_id)},
+                    translation_placeholders={
+                        "apartment": unit.apartment_no or str(unit_id)
+                    },
                 )
                 continue
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
@@ -136,7 +151,9 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
             delivery_types = await self.client.async_get_delivery_types(unit_id) or [
                 HEATING_DELIVERY_TYPE
             ]
-            year = season_year(await self.client.async_get_billing_periods(unit_id), today)
+            year = season_year(
+                await self.client.async_get_billing_periods(unit_id), today
+            )
             model = await self.client.async_get_model(unit_id, delivery_types[0])
             data.units[unit_id] = ResidentialUnitInfo(
                 id=unit_id,
@@ -147,7 +164,9 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
 
             meters: dict[str, Meter] = {}
             for delivery_type in delivery_types:
-                readout = await self.client.async_get_last_sync_date(unit_id, delivery_type, year)
+                readout = await self.client.async_get_last_sync_date(
+                    unit_id, delivery_type, year
+                )
                 if readout is not None:
                     readout = min(readout, today)
                 for status in await self.client.async_get_device_statuses(
@@ -169,20 +188,32 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
     async def _async_fill_days(
         self, billing_unit_id: int, unit_id: int, meters: dict[str, Meter], today: date
     ) -> None:
-        """Fetch the per-day values from the start of the window up to the last readout."""
-        readouts = [meter.last_readout for meter in meters.values() if meter.last_readout]
+        """Fetch the per-day values from the window start up to the last readout."""
+        readouts = [
+            meter.last_readout for meter in meters.values() if meter.last_readout
+        ]
         if not readouts:
             return
         last_readout = max(readouts)
         window_start = today - timedelta(days=HISTORY_DAYS)
-        if last_readout < window_start:
+        wanted = _days_between(window_start, last_readout)
+        if not wanted:
             return
-        wanted = [
-            window_start + timedelta(days=offset)
-            for offset in range((last_readout - window_start).days + 1)
-        ]
+        values_by_day = await self._async_values_by_day(
+            billing_unit_id, unit_id, wanted, last_readout
+        )
+        for day in wanted:
+            for device_number, value in values_by_day.get(day, {}).items():
+                meter = meters.get(device_number)
+                if meter and meter.last_readout and day <= meter.last_readout:
+                    meter.days[day] = value
+
+    async def _async_values_by_day(
+        self, billing_unit_id: int, unit_id: int, wanted: list[date], last_readout: date
+    ) -> dict[date, dict[str, float]]:
+        """Return the export of each wanted day, fetching only days not cached."""
         cache = self._final_days.setdefault(unit_id, {})
-        for day in [day for day in cache if day < window_start]:
+        for day in [day for day in cache if day < wanted[0]]:
             del cache[day]
         fetched = await self.client.async_get_days(
             billing_unit_id, unit_id, [day for day in wanted if day not in cache]
@@ -190,10 +221,4 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
         for day, values in fetched.items():
             if day < last_readout:
                 cache[day] = values
-
-        values_by_day = {**cache, **fetched}
-        for day in wanted:
-            for device_number, value in values_by_day.get(day, {}).items():
-                meter = meters.get(device_number)
-                if meter and meter.last_readout and day <= meter.last_readout:
-                    meter.days[day] = value
+        return {**cache, **fetched}

@@ -5,16 +5,19 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
+import pytest
 from homeassistant.components.recorder.statistics import statistics_during_period
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-import pytest
 from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
 from custom_components.mijnted.models import Meter
-from custom_components.mijnted.statistics import async_import_meter_statistics, statistic_id
+from custom_components.mijnted.statistics import (
+    async_import_meter_statistics,
+    statistic_id,
+)
 
 DEVICE = "90000001"
 STAT_ID = statistic_id(DEVICE)
@@ -41,7 +44,14 @@ async def rows(hass: HomeAssistant) -> dict[date, tuple[float, float]]:
     """(state, sum) per local day."""
     start = dt_util.start_of_local_day(date(2026, 1, 1))
     result = await hass.async_add_executor_job(
-        statistics_during_period, hass, start, None, {STAT_ID}, "hour", None, {"state", "sum"}
+        statistics_during_period,
+        hass,
+        start,
+        None,
+        {STAT_ID},
+        "hour",
+        None,
+        {"state", "sum"},
     )
     out: dict[date, tuple[float, float]] = {}
     for row in result.get(STAT_ID, []):
@@ -63,7 +73,9 @@ async def daily_change(hass: HomeAssistant) -> dict[date, float]:
 
 
 def days_from(first: date, values: list[float]) -> dict[date, float]:
-    return {first + timedelta(days=offset): value for offset, value in enumerate(values)}
+    return {
+        first + timedelta(days=offset): value for offset, value in enumerate(values)
+    }
 
 
 @pytest.fixture
@@ -112,7 +124,9 @@ async def test_weekend_values_arrive_on_monday(hass: HomeAssistant) -> None:
     # Saturday's update: readouts up to Friday the 13th.
     await import_days(hass, days_from(date(2026, 11, 9), [10, 12, 15, 17, 20]))
     # Monday's update: Saturday, Sunday and Monday arrive together.
-    await import_days(hass, days_from(date(2026, 11, 9), [10, 12, 15, 17, 20, 26, 31, 33]))
+    await import_days(
+        hass, days_from(date(2026, 11, 9), [10, 12, 15, 17, 20, 26, 31, 33])
+    )
     changes = await daily_change(hass)
     assert changes[date(2026, 11, 14)] == 6
     assert changes[date(2026, 11, 15)] == 5

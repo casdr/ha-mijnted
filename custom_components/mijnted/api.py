@@ -1,8 +1,8 @@
 """Async client for the mijnTED portal (Techem heat cost allocators).
 
-The portal is a single-page app on Azure AD B2C. Signing in works without a browser: fetch the
-authorize page (PKCE), submit the credentials to SelfAsserted, confirm, and redeem the code. The
-API token comes from a refresh-token grant with the API.Call scope.
+The portal is a single-page app on Azure AD B2C. Signing in works without a browser:
+fetch the authorize page (PKCE), submit the credentials to SelfAsserted, confirm, and
+redeem the code. The API token comes from a refresh-token grant with the API.Call scope.
 """
 
 from __future__ import annotations
@@ -10,18 +10,21 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
-from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta, tzinfo
 import hashlib
 import json
 import logging
 import re
 import secrets
-from types import TracebackType
-from typing import Any
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
+
+if TYPE_CHECKING:
+    from types import TracebackType
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,16 +36,31 @@ ORIGIN = "https://mijnted.nl"
 B2C_HOST = f"https://{TENANT}.b2clogin.com"
 B2C_BASE = f"{B2C_HOST}/{TENANT}.onmicrosoft.com/{POLICY}"
 SIGN_IN_SCOPE = "openid profile offline_access"
-API_SCOPE = f"openid offline_access https://MyTedprod.onmicrosoft.com/{CLIENT_ID}/API.Call profile"
+API_SCOPE = (
+    "openid offline_access "
+    f"https://MyTedprod.onmicrosoft.com/{CLIENT_ID}/API.Call profile"
+)
 API_BASE = "https://ted-prod-function-app.azurewebsites.net/api"
 EXPECTED_SIGN_IN_API = "CombinedSigninAndSignup"
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 # Renew tokens this long before they expire.
 TOKEN_MARGIN = timedelta(minutes=2)
-# B2C caps refresh tokens at 24 hours for this client; used when the response omits the lifetime.
+# B2C caps refresh tokens at 24 hours for this client; used when the response omits the
+# lifetime.
 DEFAULT_REFRESH_LIFETIME = timedelta(hours=24)
 EXPORT_CONCURRENCY = 4
+
+
+class SignInStep(StrEnum):
+    """Steps of the sign-in, named in errors about an unexpected page."""
+
+    AUTHORIZE = "authorize"
+    CREDENTIALS = "credentials"
+    CONFIRM = "confirm"
+    REDIRECT = "redirect"
+    REDEEM_CODE = "token"
+    REDEEM_REFRESH = "api_token"
 
 
 class MijntedError(Exception):
@@ -54,9 +72,13 @@ class MijntedAuthError(MijntedError):
 
 
 class MijntedUnexpectedPageError(MijntedError):
-    """The sign-in flow showed a page this client does not handle (MFA, captcha, new layout)."""
+    """The sign-in showed a page this client does not handle.
 
-    def __init__(self, step: str) -> None:
+    For example multi-factor authentication, a captcha or a changed layout.
+    """
+
+    def __init__(self, step: SignInStep) -> None:
+        """Initialize the error with the sign-in step that failed."""
         super().__init__(f"Unexpected sign-in page at step '{step}'")
         self.step = step
 
@@ -74,6 +96,18 @@ class Tokens:
     refresh_token: str
     refresh_expires: datetime
     account_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class _SignInPage:
+    """What the sign-in page tells the next steps."""
+
+    url: str
+    csrf: str
+    trans_id: str
+    api: str
+    tenant_path: str
+    policy: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,30 +146,33 @@ def _b64url(raw: bytes) -> str:
 
 
 def jwt_claims(token: str) -> dict[str, Any]:
-    """Decode a JWT payload without verifying it. Only used to read the account id and expiry."""
+    """Decode a JWT payload without verifying it, to read the account id."""
     try:
         payload = token.split(".")[1]
         decoded = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
         claims = json.loads(decoded)
-    except (IndexError, ValueError, binascii.Error):
+    except IndexError, ValueError, binascii.Error:
         return {}
     return claims if isinstance(claims, dict) else {}
 
 
 def _page_setting(page: str, key: str) -> str | None:
-    """Pick a string field out of the sign-in page's SETTINGS literal (not strict JSON)."""
+    """Pick a string field out of the sign-in page's SETTINGS literal.
+
+    The literal is JavaScript, not strict JSON.
+    """
     match = re.search(rf'"{re.escape(key)}"\s*:\s*"([^"]*)"', page)
     return match.group(1) if match else None
 
 
 def _parse_date(value: Any) -> date | None:
-    """Parse the portal's date formats: '13/11/2026', '2026-06-01T00:00:00', '31-05-2023'."""
+    """Parse the portal's dates: 13/11/2026, 2026-06-01T00:00:00 and 31-05-2023."""
     if not isinstance(value, str) or not value.strip():
         return None
     text = value.strip().split("T")[0].split(" ")[0]
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
         try:
-            return datetime.strptime(text, fmt).date()
+            return datetime.strptime(text, fmt).replace(tzinfo=UTC).date()
         except ValueError:
             continue
     return None
@@ -152,8 +189,8 @@ def _as_float(value: Any) -> float | None:
 class MijntedClient:
     """Client for one mijnTED account.
 
-    The session must have its own cookie jar: the B2C sign-in relies on cookies, and they must not
-    leak into a shared jar. The jar is cleared before every full sign-in.
+    The session must have its own cookie jar: the B2C sign-in relies on cookies, and
+    they must not leak into a shared jar. The jar is cleared before every full sign-in.
     """
 
     def __init__(
@@ -182,9 +219,7 @@ class MijntedClient:
         self._password = password
         self._tokens = None
 
-    # ----------------------------------------------------------------------------------------
     # Authentication
-    # ----------------------------------------------------------------------------------------
 
     async def async_sign_in(self) -> str:
         """Do a full sign-in and fetch an API token. Returns the account id."""
@@ -194,7 +229,7 @@ class MijntedClient:
             return self._tokens.account_id
 
     async def _async_access_token(self) -> str:
-        """Return a valid API token: cached, else refreshed, else from a full sign-in."""
+        """Return a valid API token: cached, refreshed, or from a full sign-in."""
         async with self._token_lock:
             now = datetime.now(UTC)
             tokens = self._tokens
@@ -204,7 +239,8 @@ class MijntedClient:
                 try:
                     self._tokens = await self._redeem_refresh(tokens.refresh_token)
                 except MijntedAuthError:
-                    # Refresh token revoked or expired early: fall back to a full sign-in.
+                    # Refresh token revoked or expired early: fall back to a full
+                    # sign-in.
                     _LOGGER.debug("Refresh token refused, signing in again")
                     self._tokens = None
                 else:
@@ -218,7 +254,28 @@ class MijntedClient:
         self._session.cookie_jar.clear()
         verifier = _b64url(secrets.token_bytes(32))
         challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
+        page = await self._authorize(challenge)
+        await self._submit_credentials(page)
+        code = await self._confirm(page)
 
+        _LOGGER.debug("Sign-in: redeeming authorization code")
+        body = await self._token_request(
+            {
+                "grant_type": "authorization_code",
+                "client_id": CLIENT_ID,
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+                "code_verifier": verifier,
+                "scope": SIGN_IN_SCOPE,
+            }
+        )
+        refresh = body.get("refresh_token")
+        if not isinstance(refresh, str) or not refresh:
+            raise MijntedUnexpectedPageError(SignInStep.REDEEM_CODE)
+        return refresh
+
+    async def _authorize(self, challenge: str) -> _SignInPage:
+        """Fetch the sign-in page and read its CSRF token and transaction id."""
         _LOGGER.debug("Sign-in: fetching authorize page")
         params = {
             "client_id": CLIENT_ID,
@@ -231,91 +288,97 @@ class MijntedClient:
             "state": secrets.token_hex(8),
             "nonce": secrets.token_hex(8),
         }
-        async with self._request("GET", f"{B2C_BASE}/oauth2/v2.0/authorize", params=params) as resp:
-            page = await resp.text()
-            authorize_url = str(resp.url)
+        async with self._request(
+            "GET", f"{B2C_BASE}/oauth2/v2.0/authorize", params=params
+        ) as resp:
+            text = await resp.text()
             if resp.status != 200:
-                raise MijntedConnectionError(f"authorize returned HTTP {resp.status}")
+                msg = f"authorize returned HTTP {resp.status}"
+                raise MijntedConnectionError(msg)
+            url = str(resp.url)
 
-        csrf = _page_setting(page, "csrf")
-        trans_id = _page_setting(page, "transId")
-        api = _page_setting(page, "api")
-        tenant_path = _page_setting(page, "tenant") or f"/{TENANT}.onmicrosoft.com/{POLICY}"
-        policy = _page_setting(page, "policy") or POLICY
-        if not csrf or not trans_id or api != EXPECTED_SIGN_IN_API:
-            raise MijntedUnexpectedPageError("authorize")
-        if not tenant_path.startswith("/"):
-            raise MijntedUnexpectedPageError("authorize")
+        csrf = _page_setting(text, "csrf")
+        trans_id = _page_setting(text, "transId")
+        api = _page_setting(text, "api")
+        tenant_path = (
+            _page_setting(text, "tenant") or f"/{TENANT}.onmicrosoft.com/{POLICY}"
+        )
+        if (
+            not csrf
+            or not trans_id
+            or api != EXPECTED_SIGN_IN_API
+            or not tenant_path.startswith("/")
+        ):
+            raise MijntedUnexpectedPageError(SignInStep.AUTHORIZE)
+        return _SignInPage(
+            url=url,
+            csrf=csrf,
+            trans_id=trans_id,
+            api=api,
+            tenant_path=tenant_path,
+            policy=_page_setting(text, "policy") or POLICY,
+        )
 
+    async def _submit_credentials(self, page: _SignInPage) -> None:
+        """Post the e-mail address and password to the sign-in page."""
         _LOGGER.debug("Sign-in: submitting credentials")
         async with self._request(
             "POST",
-            f"{B2C_HOST}{tenant_path}/SelfAsserted",
-            params={"tx": trans_id, "p": policy},
+            f"{B2C_HOST}{page.tenant_path}/SelfAsserted",
+            params={"tx": page.trans_id, "p": page.policy},
             data={
                 "request_type": "RESPONSE",
                 "email": self._email,
                 "password": self._password,
             },
             headers={
-                "X-CSRF-TOKEN": csrf,
+                "X-CSRF-TOKEN": page.csrf,
                 "X-Requested-With": "XMLHttpRequest",
                 "Origin": B2C_HOST,
-                "Referer": authorize_url,
+                "Referer": page.url,
             },
         ) as resp:
             if resp.status != 200:
-                raise MijntedConnectionError(f"SelfAsserted returned HTTP {resp.status}")
+                msg = f"SelfAsserted returned HTTP {resp.status}"
+                raise MijntedConnectionError(msg)
             try:
                 reply = json.loads(await resp.text())
             except ValueError as err:
-                raise MijntedUnexpectedPageError("credentials") from err
+                raise MijntedUnexpectedPageError(SignInStep.CREDENTIALS) from err
         status = str(reply.get("status")) if isinstance(reply, dict) else None
         if status == "400":
-            # Wrong e-mail or password, or a locked account. B2C's message may echo input, so it
-            # is not logged.
-            raise MijntedAuthError("Credentials rejected")
+            # Wrong e-mail or password, or a locked account. B2C's message may echo
+            # input, so it is not logged.
+            msg = "Credentials rejected"
+            raise MijntedAuthError(msg)
         if status != "200":
-            raise MijntedUnexpectedPageError("credentials")
+            raise MijntedUnexpectedPageError(SignInStep.CREDENTIALS)
 
+    async def _confirm(self, page: _SignInPage) -> str:
+        """Confirm the sign-in and return the authorization code from the redirect."""
         _LOGGER.debug("Sign-in: confirming")
         async with self._request(
             "GET",
-            f"{B2C_HOST}{tenant_path}/api/{api}/confirmed",
+            f"{B2C_HOST}{page.tenant_path}/api/{page.api}/confirmed",
             params={
                 "rememberMe": "false",
-                "csrf_token": csrf,
-                "tx": trans_id,
-                "p": policy,
+                "csrf_token": page.csrf,
+                "tx": page.trans_id,
+                "p": page.policy,
             },
             allow_redirects=False,
         ) as resp:
             location = resp.headers.get("Location", "")
             if resp.status not in (301, 302, 303) or not location:
-                # B2C shows another page here for MFA, terms of use or a password reset.
-                raise MijntedUnexpectedPageError("confirm")
+                # B2C shows another page here for MFA, terms of use or a new password.
+                raise MijntedUnexpectedPageError(SignInStep.CONFIRM)
         parts = urlsplit(location)
         query = parse_qs(parts.fragment) or parse_qs(parts.query)
-        if "code" not in query:
-            if "error" in query:
-                raise MijntedUnexpectedPageError("confirm")
-            raise MijntedUnexpectedPageError("redirect")
-
-        _LOGGER.debug("Sign-in: redeeming authorization code")
-        body = await self._token_request(
-            {
-                "grant_type": "authorization_code",
-                "client_id": CLIENT_ID,
-                "code": query["code"][0],
-                "redirect_uri": REDIRECT_URI,
-                "code_verifier": verifier,
-                "scope": SIGN_IN_SCOPE,
-            }
-        )
-        refresh = body.get("refresh_token")
-        if not isinstance(refresh, str) or not refresh:
-            raise MijntedUnexpectedPageError("token")
-        return refresh
+        if "code" in query:
+            return query["code"][0]
+        if "error" in query:
+            raise MijntedUnexpectedPageError(SignInStep.CONFIRM)
+        raise MijntedUnexpectedPageError(SignInStep.REDIRECT)
 
     async def _redeem_refresh(self, refresh_token: str) -> Tokens:
         """Exchange a refresh token for an API token."""
@@ -330,17 +393,21 @@ class MijntedClient:
         )
         access = body.get("access_token")
         if not isinstance(access, str) or not access:
-            raise MijntedUnexpectedPageError("api_token")
+            raise MijntedUnexpectedPageError(SignInStep.REDEEM_REFRESH)
         now = datetime.now(UTC)
         claims = jwt_claims(access)
         account_id = claims.get("sub") or claims.get("oid")
         if not isinstance(account_id, str) or not account_id:
-            raise MijntedUnexpectedPageError("api_token")
+            raise MijntedUnexpectedPageError(SignInStep.REDEEM_REFRESH)
         expires_in = body.get("expires_in")
-        access_life = timedelta(seconds=int(expires_in)) if expires_in else timedelta(minutes=30)
+        access_life = (
+            timedelta(seconds=int(expires_in)) if expires_in else timedelta(minutes=30)
+        )
         refresh_in = body.get("refresh_token_expires_in")
         refresh_life = (
-            timedelta(seconds=int(refresh_in)) if refresh_in else DEFAULT_REFRESH_LIFETIME
+            timedelta(seconds=int(refresh_in))
+            if refresh_in
+            else DEFAULT_REFRESH_LIFETIME
         )
         return Tokens(
             access_token=access,
@@ -360,26 +427,27 @@ class MijntedClient:
         ) as resp:
             text = await resp.text()
             if resp.status >= 500:
-                raise MijntedConnectionError(f"token endpoint returned HTTP {resp.status}")
+                msg = f"token endpoint returned HTTP {resp.status}"
+                raise MijntedConnectionError(msg)
         try:
             body = json.loads(text)
         except ValueError as err:
-            raise MijntedUnexpectedPageError("token") from err
+            raise MijntedUnexpectedPageError(SignInStep.REDEEM_CODE) from err
         if not isinstance(body, dict):
-            raise MijntedUnexpectedPageError("token")
+            raise MijntedUnexpectedPageError(SignInStep.REDEEM_CODE)
         if resp.status != 200:
             if body.get("error") in ("invalid_grant", "invalid_request"):
-                raise MijntedAuthError("Token request refused")
-            raise MijntedConnectionError(f"token endpoint returned HTTP {resp.status}")
+                msg = "Token request refused"
+                raise MijntedAuthError(msg)
+            msg = f"token endpoint returned HTTP {resp.status}"
+            raise MijntedConnectionError(msg)
         return body
 
     def _request(self, method: str, url: str, **kwargs: Any) -> _ErrorMapping:
         kwargs.setdefault("timeout", REQUEST_TIMEOUT)
         return _ErrorMapping(self._session.request(method, url, **kwargs))
 
-    # ----------------------------------------------------------------------------------------
     # Portal API
-    # ----------------------------------------------------------------------------------------
 
     async def _api(self, method: str, path: str, **kwargs: Any) -> Any:
         token = await self._async_access_token()
@@ -388,18 +456,23 @@ class MijntedClient:
             "Origin": ORIGIN,
             "Accept": "application/json",
         }
-        async with self._request(method, f"{API_BASE}{path}", headers=headers, **kwargs) as resp:
+        async with self._request(
+            method, f"{API_BASE}{path}", headers=headers, **kwargs
+        ) as resp:
             if resp.status == 401:
                 # Token rejected: drop it, so the next update signs in again.
                 self._tokens = None
-                raise MijntedConnectionError(f"{path.split('/')[1]}: token rejected")
+                msg = f"{path.split('/')[1]}: token rejected"
+                raise MijntedConnectionError(msg)
             if resp.status != 200:
-                raise MijntedConnectionError(f"{path.split('/')[1]}: HTTP {resp.status}")
+                msg = f"{path.split('/')[1]}: HTTP {resp.status}"
+                raise MijntedConnectionError(msg)
             text = await resp.text()
         try:
             return json.loads(text) if text else None
         except ValueError as err:
-            raise MijntedConnectionError(f"{path.split('/')[1]}: invalid JSON") from err
+            msg = f"{path.split('/')[1]}: invalid JSON"
+            raise MijntedConnectionError(msg) from err
 
     async def async_get_residential_unit_ids(self) -> list[int]:
         """Residential units this account may see."""
@@ -413,7 +486,8 @@ class MijntedClient:
         """Details of one residential unit, including its billing unit."""
         data = await self._api("GET", f"/residentialUnitDetailItem/{unit_id}")
         if not isinstance(data, dict) or not isinstance(data.get("billingUnitId"), int):
-            raise MijntedConnectionError("residentialUnitDetailItem: no billing unit")
+            msg = "residentialUnitDetailItem: no billing unit"
+            raise MijntedConnectionError(msg)
         apartment = data.get("appartmentNo")
         return ResidentialUnit(
             id=unit_id,
@@ -451,7 +525,9 @@ class MijntedClient:
         self, unit_id: int, delivery_type: int, year: int
     ) -> date | None:
         """Date of the last readout Techem received."""
-        data = await self._api("GET", f"/getLastSyncDate/{unit_id}/{delivery_type}/{year}")
+        data = await self._api(
+            "GET", f"/getLastSyncDate/{unit_id}/{delivery_type}/{year}"
+        )
         return _parse_date(data)
 
     async def async_get_device_statuses(
@@ -508,14 +584,16 @@ class MijntedClient:
 
         async def fetch(day: date) -> tuple[date, dict[str, float]]:
             async with semaphore:
-                return day, await self.async_get_day_values(billing_unit_id, unit_id, day)
+                return day, await self.async_get_day_values(
+                    billing_unit_id, unit_id, day
+                )
 
         results = await asyncio.gather(*(fetch(day) for day in days))
         return dict(results)
 
 
 class _ErrorMapping:
-    """Wrap a request context manager and map aiohttp errors to MijntedConnectionError."""
+    """Map aiohttp errors of a request to MijntedConnectionError."""
 
     def __init__(self, ctx: Any) -> None:
         self._ctx = ctx

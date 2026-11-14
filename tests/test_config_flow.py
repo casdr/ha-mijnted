@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType, InvalidData
-import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mijnted.api import (
@@ -18,14 +18,16 @@ from custom_components.mijnted.api import (
 )
 from custom_components.mijnted.const import CONF_UPDATE_INTERVAL, DOMAIN
 
-from .conftest import ACCOUNT_ID, EMAIL, PASSWORD, FakePortal
+from .fake_portal import ACCOUNT_ID, EMAIL, PASSWORD, FakePortal
 
 pytestmark = pytest.mark.usefixtures("mock_client", "mock_setup_entry")
 
 
 @pytest.fixture
 def mock_setup_entry() -> Generator[AsyncMock]:
-    with patch("custom_components.mijnted.async_setup_entry", return_value=True) as mock:
+    with patch(
+        "custom_components.mijnted.async_setup_entry", return_value=True
+    ) as mock:
         yield mock
 
 
@@ -76,7 +78,9 @@ async def test_user_flow_errors_then_recover(
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
-async def test_user_flow_without_residential_units(hass: HomeAssistant, portal: FakePortal) -> None:
+async def test_user_flow_without_residential_units(
+    hass: HomeAssistant, portal: FakePortal
+) -> None:
     portal.async_get_residential_unit_ids = AsyncMock(return_value=[])  # type: ignore[method-assign]
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -128,7 +132,9 @@ async def test_reauth_with_other_account(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
     other = MockConfigEntry(
-        domain=DOMAIN, unique_id="someone-else", data={"email": EMAIL, "password": PASSWORD}
+        domain=DOMAIN,
+        unique_id="someone-else",
+        data={"email": EMAIL, "password": PASSWORD},
     )
     other.add_to_hass(hass)
     result = await other.start_reauth_flow(hass)
@@ -153,7 +159,9 @@ async def test_reconfigure(hass: HomeAssistant, config_entry: MockConfigEntry) -
     assert config_entry.title == "new@example.com"
 
 
-async def test_options_update_interval(hass: HomeAssistant, config_entry: MockConfigEntry) -> None:
+async def test_options_update_interval(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
     config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(config_entry.entry_id)
     result = await hass.config_entries.options.async_init(config_entry.entry_id)

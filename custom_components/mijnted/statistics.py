@@ -1,14 +1,16 @@
 """Import per-day meter values as external statistics, dated on the day they belong to.
 
-Each day gets one hourly row at local midnight with the cumulative season value as `state` and a
-running `sum`. The sum continues from the last row before the imported window, so importing the
-same days again overwrites the rows with the same values instead of adding to them.
+Each day gets one hourly row at local midnight with the cumulative season value as
+`state` and a running `sum`. The sum continues from the last row before the imported
+window, so importing the same days again overwrites the rows with the same values
+instead of adding to them.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import (
@@ -20,11 +22,13 @@ from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
     statistics_during_period,
 )
-from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, UNIT_UNITS
 from .models import Meter, daily_changes, meter_name
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +44,7 @@ def statistic_id(device_number: str) -> str:
 def _last_row_before(
     hass: HomeAssistant, stat_id: str, before: datetime
 ) -> tuple[float | None, float]:
-    """State and sum of the newest row before `before`; (None, 0.0) when there is none."""
+    """State and sum of the newest row before `before`, or (None, 0.0) without one."""
     rows = statistics_during_period(
         hass, before - LOOKBACK, before, {stat_id}, "hour", None, {"state", "sum"}
     ).get(stat_id, [])
@@ -50,7 +54,9 @@ def _last_row_before(
     return last.get("state"), last.get("sum") or 0.0
 
 
-async def async_import_meter_statistics(hass: HomeAssistant, meters: list[Meter]) -> None:
+async def async_import_meter_statistics(
+    hass: HomeAssistant, meters: list[Meter]
+) -> None:
     """Import the per-day values of the given meters."""
     language = hass.config.language
     for meter in meters:
@@ -65,7 +71,9 @@ async def async_import_meter_statistics(hass: HomeAssistant, meters: list[Meter]
         for day, value, change in daily_changes(meter.days, previous_state):
             running_sum += change
             rows.append(
-                StatisticData(start=dt_util.start_of_local_day(day), state=value, sum=running_sum)
+                StatisticData(
+                    start=dt_util.start_of_local_day(day), state=value, sum=running_sum
+                )
             )
         metadata = StatisticMetaData(
             mean_type=StatisticMeanType.NONE,

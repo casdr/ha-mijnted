@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections.abc import AsyncGenerator
-from datetime import date
 import json
 import re
+from collections.abc import AsyncGenerator
+from datetime import date
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -26,7 +26,15 @@ from custom_components.mijnted.api import (
     MijntedUnexpectedPageError,
 )
 
-from .conftest import ACCOUNT_ID, BILLING_UNIT_ID, EMAIL, PASSWORD, UNIT_ID, load_json, load_text
+from .fake_portal import (
+    ACCOUNT_ID,
+    BILLING_UNIT_ID,
+    EMAIL,
+    PASSWORD,
+    UNIT_ID,
+    load_json,
+    load_text,
+)
 
 TZ = ZoneInfo("Europe/Amsterdam")
 AUTHORIZE = re.compile(r"/oauth2/v2\.0/authorize")
@@ -52,10 +60,15 @@ class TokenEndpoint:
         self.grants: list[dict[str, Any]] = []
         self.refuse_refresh = False
 
-    async def __call__(self, method: str, url: URL, data: Any) -> AiohttpClientMockResponse:
+    async def __call__(
+        self, method: str, url: URL, data: Any
+    ) -> AiohttpClientMockResponse:
         self.grants.append(dict(data))
         if data["grant_type"] == "authorization_code":
-            body: dict[str, Any] = {"refresh_token": "refresh-1", "refresh_token_expires_in": 86400}
+            body: dict[str, Any] = {
+                "refresh_token": "refresh-1",
+                "refresh_token_expires_in": 86400,
+            }
             return AiohttpClientMockResponse(method, url, json=body)
         if self.refuse_refresh:
             self.refuse_refresh = False
@@ -104,7 +117,9 @@ def mock_sign_in(
         headers={"Location": "https://mijnted.nl/#state=x&client_info=y&code=the-code"}
         if confirmed_status == 302
         else None,
-        text="<html>Enter the code we sent you</html>" if confirmed_status != 302 else None,
+        text="<html>Enter the code we sent you</html>"
+        if confirmed_status != 302
+        else None,
     )
     mocker.post(TOKEN, side_effect=token_endpoint)
 
@@ -159,7 +174,10 @@ async def test_bad_password(
     ids=["layout_changed", "mfa_page"],
 )
 async def test_unexpected_authorize_page(
-    client: MijntedClient, mocker: AiohttpClientMocker, token_endpoint: TokenEndpoint, page: str
+    client: MijntedClient,
+    mocker: AiohttpClientMocker,
+    token_endpoint: TokenEndpoint,
+    page: str,
 ) -> None:
     mock_sign_in(mocker, token_endpoint, page=page)
     with pytest.raises(MijntedUnexpectedPageError) as err:
@@ -217,7 +235,9 @@ async def test_expired_access_token_uses_refresh_token(
 
     await client.async_get_residential_unit_ids()
     assert len(calls_to(mocker, "SelfAsserted")) == 1
-    assert [grant["grant_type"] for grant in token_endpoint.grants][-1] == "refresh_token"
+    assert [grant["grant_type"] for grant in token_endpoint.grants][
+        -1
+    ] == "refresh_token"
 
 
 async def test_refused_refresh_falls_back_to_sign_in(
@@ -249,14 +269,20 @@ async def test_discovery_endpoints(
 ) -> None:
     mock_sign_in(mocker, token_endpoint)
     mocker.get(
-        f"{API}/residentialUnitDetailItem/{UNIT_ID}", json=load_json("residential_unit.json")
+        f"{API}/residentialUnitDetailItem/{UNIT_ID}",
+        json=load_json("residential_unit.json"),
     )
-    mocker.get(f"{API}/address/deliveryTypes/{UNIT_ID}", json=load_json("delivery_types.json"))
     mocker.get(
-        f"{API}/residentialUnit/{UNIT_ID}/billingPeriods", json=load_json("billing_periods.json")
+        f"{API}/address/deliveryTypes/{UNIT_ID}", json=load_json("delivery_types.json")
+    )
+    mocker.get(
+        f"{API}/residentialUnit/{UNIT_ID}/billingPeriods",
+        json=load_json("billing_periods.json"),
     )
     mocker.get(f"{API}/activeModel/{UNIT_ID}/1", json="F71")
-    mocker.get(f"{API}/getLastSyncDate/{UNIT_ID}/1/2027", json=load_json("last_sync_date.json"))
+    mocker.get(
+        f"{API}/getLastSyncDate/{UNIT_ID}/1/2027", json=load_json("last_sync_date.json")
+    )
     mocker.get(
         f"{API}/deviceStatuses/{UNIT_ID}/1/2027?fromDate=2026-11-14",
         json=load_json("device_statuses.json"),
@@ -271,7 +297,9 @@ async def test_discovery_endpoints(
     assert periods[0].end == date(2027, 5, 31)
     assert await client.async_get_model(UNIT_ID, 1) == "F71"
     assert await client.async_get_last_sync_date(UNIT_ID, 1, 2027) == date(2026, 11, 13)
-    statuses = await client.async_get_device_statuses(UNIT_ID, 1, 2027, date(2026, 11, 14))
+    statuses = await client.async_get_device_statuses(
+        UNIT_ID, 1, 2027, date(2026, 11, 14)
+    )
     assert [(s.device_number, s.room) for s in statuses][:3] == [
         ("90000001", "W"),
         ("90000002", "KA"),
@@ -290,7 +318,9 @@ async def test_day_values_use_local_midnight(
         "?date=2026-11-12T23:00:00.000Z",
         json=exports["2026-11-12T23:00:00.000Z"],
     )
-    values = await client.async_get_day_values(BILLING_UNIT_ID, UNIT_ID, date(2026, 11, 13))
+    values = await client.async_get_day_values(
+        BILLING_UNIT_ID, UNIT_ID, date(2026, 11, 13)
+    )
     _, _, body, _ = calls_to(mocker, "runBillingUnitMeterValuesExport")[0]
     assert body == [UNIT_ID]
     assert values["90000001"] == 22.0

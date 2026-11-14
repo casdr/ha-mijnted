@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from typing import TYPE_CHECKING
 
 from .const import ROOMS_EN, ROOMS_NL
+
+if TYPE_CHECKING:
+    from datetime import date
 
 
 def meter_name(device_number: str, room_code: str | None, language: str) -> str:
@@ -20,8 +23,8 @@ def meter_name(device_number: str, room_code: str | None, language: str) -> str:
 class Meter:
     """One heat cost allocator and its per-day cumulative values.
 
-    `days` holds only days up to and including the last readout date. Days after it repeat the
-    last value in the portal and are not real readings.
+    `days` holds only days up to and including the last readout date. Days after it
+    repeat the last value in the portal and are not real readings.
     """
 
     device_number: str
@@ -78,9 +81,9 @@ def daily_changes(
 ) -> list[tuple[date, float, float]]:
     """Return (day, cumulative value, change) per day, oldest first.
 
-    The change is the difference with the day before. A drop means a new heating season: the
-    counter restarted at zero, so the new value is the change. The first day has change 0 when
-    `previous` is unknown.
+    The change is the difference with the day before. A drop means a new heating season:
+    the counter restarted at zero, so the new value is the change. The first day has
+    change 0 when `previous` is unknown.
     """
     result: list[tuple[date, float, float]] = []
     for day in sorted(days):
