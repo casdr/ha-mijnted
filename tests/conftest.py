@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import annotationlib
 from collections.abc import Generator
 from datetime import date
 import inspect
@@ -13,6 +12,7 @@ from typing import Any
 import unittest.mock
 from unittest.mock import patch
 
+import annotationlib
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 

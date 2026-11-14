@@ -248,7 +248,9 @@ async def test_discovery_endpoints(
     client: MijntedClient, mocker: AiohttpClientMocker, token_endpoint: TokenEndpoint
 ) -> None:
     mock_sign_in(mocker, token_endpoint)
-    mocker.get(f"{API}/residentialUnitDetailItem/{UNIT_ID}", json=load_json("residential_unit.json"))
+    mocker.get(
+        f"{API}/residentialUnitDetailItem/{UNIT_ID}", json=load_json("residential_unit.json")
+    )
     mocker.get(f"{API}/address/deliveryTypes/{UNIT_ID}", json=load_json("delivery_types.json"))
     mocker.get(
         f"{API}/residentialUnit/{UNIT_ID}/billingPeriods", json=load_json("billing_periods.json")
