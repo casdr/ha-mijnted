@@ -6,7 +6,7 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
-# Raw browser captures contain passwords and tokens. Never commit them.
+# Raw browser captures contain passwords and tokens.
 *.har
 # Local proof of concept, kept out of the repository.
 ted_fetch.py

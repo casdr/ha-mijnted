@@ -3,8 +3,6 @@
 The portal is a single-page app on Azure AD B2C. Signing in works without a browser: fetch the
 authorize page (PKCE), submit the credentials to SelfAsserted, confirm, and redeem the code. The
 API token comes from a refresh-token grant with the API.Call scope.
-
-Never log credentials, tokens, cookies or response bodies of the sign-in requests.
 """
 
 from __future__ import annotations
@@ -35,9 +33,7 @@ ORIGIN = "https://mijnted.nl"
 B2C_HOST = f"https://{TENANT}.b2clogin.com"
 B2C_BASE = f"{B2C_HOST}/{TENANT}.onmicrosoft.com/{POLICY}"
 SIGN_IN_SCOPE = "openid profile offline_access"
-API_SCOPE = (
-    f"openid offline_access https://MyTedprod.onmicrosoft.com/{CLIENT_ID}/API.Call profile"
-)
+API_SCOPE = f"openid offline_access https://MyTedprod.onmicrosoft.com/{CLIENT_ID}/API.Call profile"
 API_BASE = "https://ted-prod-function-app.azurewebsites.net/api"
 EXPECTED_SIGN_IN_API = "CombinedSigninAndSignup"
 
@@ -71,7 +67,7 @@ class MijntedConnectionError(MijntedError):
 
 @dataclass(slots=True)
 class Tokens:
-    """Tokens for one signed-in account. Never log or print these."""
+    """Tokens for one signed-in account."""
 
     access_token: str
     access_expires: datetime
@@ -246,7 +242,9 @@ class MijntedClient:
         csrf = _page_setting(page, "csrf")
         trans_id = _page_setting(page, "transId")
         api = _page_setting(page, "api")
-        tenant_path = _page_setting(page, "tenant") or f"/{TENANT}.onmicrosoft.com/{POLICY}"
+        tenant_path = (
+            _page_setting(page, "tenant") or f"/{TENANT}.onmicrosoft.com/{POLICY}"
+        )
         policy = _page_setting(page, "policy") or POLICY
         if not csrf or not trans_id or api != EXPECTED_SIGN_IN_API:
             raise MijntedUnexpectedPageError("authorize")
@@ -258,7 +256,11 @@ class MijntedClient:
             "POST",
             f"{B2C_HOST}{tenant_path}/SelfAsserted",
             params={"tx": trans_id, "p": policy},
-            data={"request_type": "RESPONSE", "email": self._email, "password": self._password},
+            data={
+                "request_type": "RESPONSE",
+                "email": self._email,
+                "password": self._password,
+            },
             headers={
                 "X-CSRF-TOKEN": csrf,
                 "X-Requested-With": "XMLHttpRequest",
@@ -267,7 +269,9 @@ class MijntedClient:
             },
         ) as resp:
             if resp.status != 200:
-                raise MijntedConnectionError(f"SelfAsserted returned HTTP {resp.status}")
+                raise MijntedConnectionError(
+                    f"SelfAsserted returned HTTP {resp.status}"
+                )
             try:
                 reply = json.loads(await resp.text())
             except ValueError as err:
@@ -284,7 +288,12 @@ class MijntedClient:
         async with self._request(
             "GET",
             f"{B2C_HOST}{tenant_path}/api/{api}/confirmed",
-            params={"rememberMe": "false", "csrf_token": csrf, "tx": trans_id, "p": policy},
+            params={
+                "rememberMe": "false",
+                "csrf_token": csrf,
+                "tx": trans_id,
+                "p": policy,
+            },
             allow_redirects=False,
         ) as resp:
             location = resp.headers.get("Location", "")
@@ -334,10 +343,14 @@ class MijntedClient:
         if not isinstance(account_id, str) or not account_id:
             raise MijntedUnexpectedPageError("api_token")
         expires_in = body.get("expires_in")
-        access_life = timedelta(seconds=int(expires_in)) if expires_in else timedelta(minutes=30)
+        access_life = (
+            timedelta(seconds=int(expires_in)) if expires_in else timedelta(minutes=30)
+        )
         refresh_in = body.get("refresh_token_expires_in")
         refresh_life = (
-            timedelta(seconds=int(refresh_in)) if refresh_in else DEFAULT_REFRESH_LIFETIME
+            timedelta(seconds=int(refresh_in))
+            if refresh_in
+            else DEFAULT_REFRESH_LIFETIME
         )
         return Tokens(
             access_token=access,
@@ -350,11 +363,16 @@ class MijntedClient:
     async def _token_request(self, data: dict[str, str]) -> dict[str, Any]:
         """POST to the token endpoint. SPA clients must send an Origin header."""
         async with self._request(
-            "POST", f"{B2C_BASE}/oauth2/v2.0/token", data=data, headers={"Origin": ORIGIN}
+            "POST",
+            f"{B2C_BASE}/oauth2/v2.0/token",
+            data=data,
+            headers={"Origin": ORIGIN},
         ) as resp:
             text = await resp.text()
             if resp.status >= 500:
-                raise MijntedConnectionError(f"token endpoint returned HTTP {resp.status}")
+                raise MijntedConnectionError(
+                    f"token endpoint returned HTTP {resp.status}"
+                )
         try:
             body = json.loads(text)
         except ValueError as err:
@@ -382,13 +400,17 @@ class MijntedClient:
             "Origin": ORIGIN,
             "Accept": "application/json",
         }
-        async with self._request(method, f"{API_BASE}{path}", headers=headers, **kwargs) as resp:
+        async with self._request(
+            method, f"{API_BASE}{path}", headers=headers, **kwargs
+        ) as resp:
             if resp.status == 401:
                 # Token rejected: drop it, so the next update signs in again.
                 self._tokens = None
                 raise MijntedConnectionError(f"{path.split('/')[1]}: token rejected")
             if resp.status != 200:
-                raise MijntedConnectionError(f"{path.split('/')[1]}: HTTP {resp.status}")
+                raise MijntedConnectionError(
+                    f"{path.split('/')[1]}: HTTP {resp.status}"
+                )
             text = await resp.text()
         try:
             return json.loads(text) if text else None
@@ -445,7 +467,9 @@ class MijntedClient:
         self, unit_id: int, delivery_type: int, year: int
     ) -> date | None:
         """Date of the last readout Techem received."""
-        data = await self._api("GET", f"/getLastSyncDate/{unit_id}/{delivery_type}/{year}")
+        data = await self._api(
+            "GET", f"/getLastSyncDate/{unit_id}/{delivery_type}/{year}"
+        )
         return _parse_date(data)
 
     async def async_get_device_statuses(
@@ -502,7 +526,9 @@ class MijntedClient:
 
         async def fetch(day: date) -> tuple[date, dict[str, float]]:
             async with semaphore:
-                return day, await self.async_get_day_values(billing_unit_id, unit_id, day)
+                return day, await self.async_get_day_values(
+                    billing_unit_id, unit_id, day
+                )
 
         results = await asyncio.gather(*(fetch(day) for day in days))
         return dict(results)
