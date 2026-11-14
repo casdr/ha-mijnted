@@ -1,0 +1,41 @@
+[project]
+name = "mijnted-ha"
+version = "0.1.0"
+description = "Home Assistant custom integration for Techem heat cost allocators via mijnTED"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PT", "RUF", "ASYNC", "S", "BLE", "TRY", "PL", "G", "LOG"]
+ignore = [
+  "PLR0913",  # HA signatures
+  "PLR2004",  # magic values in tests and HTTP status checks
+  "TRY003",   # messages on our own exceptions
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "PLR0915", "SLF001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components.mijnted"]
+force-sort-within-sections = true
+combine-as-imports = true
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+explicit_package_bases = true
+packages = ["custom_components.mijnted"]
+
+[[tool.mypy.overrides]]
+module = ["pytest_homeassistant_custom_component.*"]
+ignore_missing_imports = true
