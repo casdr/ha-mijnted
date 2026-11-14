@@ -1,0 +1,425 @@
+{
+  "2026-11-14T22:52:46.402Z": {
+    "title": "Export",
+    "columns": [
+      {
+        "title": "Techem woningnr.",
+        "field": "techemNumber"
+      },
+      {
+        "title": "Naam afnemer",
+        "field": "nameOccupant"
+      },
+      {
+        "title": "Straat",
+        "field": "street"
+      },
+      {
+        "title": "Huisnummer",
+        "field": "appartmentNo"
+      },
+      {
+        "title": "Ruimte",
+        "field": "room"
+      },
+      {
+        "title": "Metertype",
+        "field": "deviceType"
+      },
+      {
+        "title": "Meternummer",
+        "field": "deviceNumber"
+      },
+      {
+        "title": "Eenheid",
+        "field": "unitOfMeasure"
+      },
+      {
+        "title": "14-11-2026",
+        "field": "dayValue"
+      },
+      {
+        "title": "Inbouw",
+        "field": "installationDate"
+      },
+      {
+        "title": "Verwijdering",
+        "field": "deactivationDate"
+      }
+    ],
+    "initialSort": [
+      {
+        "column": "techemNumber",
+        "dir": "asc"
+      }
+    ],
+    "data": [
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "W",
+        "deviceType": "HZ",
+        "deviceNumber": "90000001",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 22.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000002",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 0.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000003",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 5.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KEU",
+        "deviceType": "HZ",
+        "deviceNumber": "90000004",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 20.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000005",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 24.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "W",
+        "deviceType": "HZ",
+        "deviceNumber": "90000006",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 21.0
+      }
+    ]
+  },
+  "2026-11-12T23:00:00.000Z": {
+    "title": "Export",
+    "columns": [
+      {
+        "title": "Techem woningnr.",
+        "field": "techemNumber"
+      },
+      {
+        "title": "Naam afnemer",
+        "field": "nameOccupant"
+      },
+      {
+        "title": "Straat",
+        "field": "street"
+      },
+      {
+        "title": "Huisnummer",
+        "field": "appartmentNo"
+      },
+      {
+        "title": "Ruimte",
+        "field": "room"
+      },
+      {
+        "title": "Metertype",
+        "field": "deviceType"
+      },
+      {
+        "title": "Meternummer",
+        "field": "deviceNumber"
+      },
+      {
+        "title": "Eenheid",
+        "field": "unitOfMeasure"
+      },
+      {
+        "title": "13-11-2026",
+        "field": "dayValue"
+      },
+      {
+        "title": "Inbouw",
+        "field": "installationDate"
+      },
+      {
+        "title": "Verwijdering",
+        "field": "deactivationDate"
+      }
+    ],
+    "initialSort": [
+      {
+        "column": "techemNumber",
+        "dir": "asc"
+      }
+    ],
+    "data": [
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "W",
+        "deviceType": "HZ",
+        "deviceNumber": "90000001",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 22.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000002",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 0.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000003",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 5.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KEU",
+        "deviceType": "HZ",
+        "deviceNumber": "90000004",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 20.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000005",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 24.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "W",
+        "deviceType": "HZ",
+        "deviceNumber": "90000006",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 21.0
+      }
+    ]
+  },
+  "2026-11-11T23:00:00.000Z": {
+    "title": "Export",
+    "columns": [
+      {
+        "title": "Techem woningnr.",
+        "field": "techemNumber"
+      },
+      {
+        "title": "Naam afnemer",
+        "field": "nameOccupant"
+      },
+      {
+        "title": "Straat",
+        "field": "street"
+      },
+      {
+        "title": "Huisnummer",
+        "field": "appartmentNo"
+      },
+      {
+        "title": "Ruimte",
+        "field": "room"
+      },
+      {
+        "title": "Metertype",
+        "field": "deviceType"
+      },
+      {
+        "title": "Meternummer",
+        "field": "deviceNumber"
+      },
+      {
+        "title": "Eenheid",
+        "field": "unitOfMeasure"
+      },
+      {
+        "title": "12-11-2026",
+        "field": "dayValue"
+      },
+      {
+        "title": "Inbouw",
+        "field": "installationDate"
+      },
+      {
+        "title": "Verwijdering",
+        "field": "deactivationDate"
+      }
+    ],
+    "initialSort": [
+      {
+        "column": "techemNumber",
+        "dir": "asc"
+      }
+    ],
+    "data": [
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "W",
+        "deviceType": "HZ",
+        "deviceNumber": "90000001",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 22.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000002",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 0.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000003",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 5.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KEU",
+        "deviceType": "HZ",
+        "deviceNumber": "90000004",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 20.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "KA",
+        "deviceType": "HZ",
+        "deviceNumber": "90000005",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 22.0
+      },
+      {
+        "techemNumber": "1",
+        "nameOccupant": "A. Tester",
+        "street": "Teststraat",
+        "appartmentNo": "1",
+        "room": "W",
+        "deviceType": "HZ",
+        "deviceNumber": "90000006",
+        "unitOfMeasure": "Eenheden",
+        "installationDate": "31-05-2023",
+        "deactivationDate": "",
+        "deactivationValue": null,
+        "dayValue": 21.0
+      }
+    ]
+  }
+}

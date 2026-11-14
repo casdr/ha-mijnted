@@ -1,0 +1,68 @@
+[
+  {
+    "measurementDeviceId": 1000,
+    "room": "W",
+    "deviceId": 1000,
+    "deviceNumber": "90000001",
+    "currentReadingValue": 22.0,
+    "unitOfMeasure": "Einheiten",
+    "installationDate": "31-05-2023 00:00:00",
+    "deactivationDate": "",
+    "radiographicMeter": true
+  },
+  {
+    "measurementDeviceId": 1001,
+    "room": "KA",
+    "deviceId": 1001,
+    "deviceNumber": "90000002",
+    "currentReadingValue": 0.0,
+    "unitOfMeasure": "Einheiten",
+    "installationDate": "31-05-2023 00:00:00",
+    "deactivationDate": "",
+    "radiographicMeter": true
+  },
+  {
+    "measurementDeviceId": 1002,
+    "room": "KA",
+    "deviceId": 1002,
+    "deviceNumber": "90000003",
+    "currentReadingValue": 5.0,
+    "unitOfMeasure": "Einheiten",
+    "installationDate": "31-05-2023 00:00:00",
+    "deactivationDate": "",
+    "radiographicMeter": true
+  },
+  {
+    "measurementDeviceId": 1003,
+    "room": "KEU",
+    "deviceId": 1003,
+    "deviceNumber": "90000004",
+    "currentReadingValue": 20.0,
+    "unitOfMeasure": "Einheiten",
+    "installationDate": "31-05-2023 00:00:00",
+    "deactivationDate": "",
+    "radiographicMeter": true
+  },
+  {
+    "measurementDeviceId": 1004,
+    "room": "KA",
+    "deviceId": 1004,
+    "deviceNumber": "90000005",
+    "currentReadingValue": 24.0,
+    "unitOfMeasure": "Einheiten",
+    "installationDate": "31-05-2023 00:00:00",
+    "deactivationDate": "",
+    "radiographicMeter": true
+  },
+  {
+    "measurementDeviceId": 1005,
+    "room": "W",
+    "deviceId": 1005,
+    "deviceNumber": "90000006",
+    "currentReadingValue": 21.0,
+    "unitOfMeasure": "Einheiten",
+    "installationDate": "31-05-2023 00:00:00",
+    "deactivationDate": "",
+    "radiographicMeter": true
+  }
+]

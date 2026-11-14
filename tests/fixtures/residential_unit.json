@@ -1,0 +1,13 @@
+{
+  "id": 100001,
+  "billingUnitId": 2001,
+  "appartmentNo": "1",
+  "street": "Teststraat",
+  "zipCode": "1234 AB",
+  "residentName": "A. Tester",
+  "hasRegistration": true,
+  "registrationId": 1,
+  "registrationComplete": true,
+  "isMeterValuesExportActive": true,
+  "costIndication": null
+}

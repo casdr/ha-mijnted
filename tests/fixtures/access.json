@@ -1,0 +1,9 @@
+{
+  "role": "Occupant",
+  "isOccupant": true,
+  "defaultResidentialUnitId": 100001,
+  "residentialUnits": [
+    100001
+  ],
+  "billingUnits": []
+}
