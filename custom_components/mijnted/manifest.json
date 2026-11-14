@@ -1,13 +1,13 @@
 {
   "domain": "mijnted",
   "name": "mijnTED (Techem)",
-  "codeowners": [],
+  "codeowners": ["@casdr"],
   "config_flow": true,
   "dependencies": ["recorder"],
-  "documentation": "https://github.com/OWNER/mijnted-ha",
+  "documentation": "https://github.com/casdr/ha-mijnted",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/OWNER/mijnted-ha/issues",
+  "issue_tracker": "https://github.com/casdr/ha-mijnted/issues",
   "loggers": ["custom_components.mijnted"],
   "requirements": [],
   "version": "0.1.0"

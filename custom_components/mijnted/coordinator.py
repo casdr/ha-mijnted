@@ -147,9 +147,7 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
 
             meters: dict[str, Meter] = {}
             for delivery_type in delivery_types:
-                readout = await self.client.async_get_last_sync_date(
-                    unit_id, delivery_type, year
-                )
+                readout = await self.client.async_get_last_sync_date(unit_id, delivery_type, year)
                 if readout is not None:
                     readout = min(readout, today)
                 for status in await self.client.async_get_device_statuses(

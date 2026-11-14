@@ -1,0 +1,105 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Inloggen bij mijnTED",
+        "description": "Gebruik het e-mailadres en wachtwoord waarmee je inlogt op mijnted.nl.",
+        "data": {
+          "email": "E-mail",
+          "password": "Wachtwoord"
+        },
+        "data_description": {
+          "email": "Het e-mailadres van je mijnTED-account.",
+          "password": "Het wachtwoord van je mijnTED-account."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Opnieuw inloggen bij mijnTED",
+        "description": "mijnTED heeft het wachtwoord voor {email} geweigerd. Vul het huidige wachtwoord in.",
+        "data": {
+          "password": "Wachtwoord"
+        },
+        "data_description": {
+          "password": "Het wachtwoord van je mijnTED-account."
+        }
+      },
+      "reconfigure": {
+        "title": "mijnTED-inloggegevens wijzigen",
+        "description": "Wijzig het e-mailadres of wachtwoord. Het moet hetzelfde mijnTED-account blijven.",
+        "data": {
+          "email": "E-mail",
+          "password": "Wachtwoord"
+        },
+        "data_description": {
+          "email": "Het e-mailadres van je mijnTED-account.",
+          "password": "Het wachtwoord van je mijnTED-account."
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "mijnTED heeft het e-mailadres of wachtwoord geweigerd.",
+      "cannot_connect": "mijnTED is niet bereikbaar. Probeer het later opnieuw.",
+      "unexpected_page": "mijnTED toonde een inlogstap die deze integratie niet ondersteunt, zoals tweestapsverificatie of een captcha. Log één keer in op mijnted.nl in een browser en probeer het daarna opnieuw.",
+      "no_residential_units": "Dit mijnTED-account heeft geen woningen met meters.",
+      "unknown": "Onverwachte fout. Zie de logboeken voor details."
+    },
+    "abort": {
+      "already_configured": "Dit mijnTED-account is al ingesteld.",
+      "reauth_successful": "Opnieuw ingelogd.",
+      "reconfigure_successful": "Inloggegevens bijgewerkt.",
+      "wrong_account": "Deze gegevens horen bij een ander mijnTED-account."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "mijnTED-opties",
+        "data": {
+          "update_interval": "Update-interval"
+        },
+        "data_description": {
+          "update_interval": "Aantal uur tussen updates. mijnTED wordt ongeveer eens per dag bijgewerkt."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cumulative": {
+        "name": "Seizoenstotaal",
+        "state_attributes": {
+          "last_readout_date": { "name": "Laatste uitleesdatum" },
+          "statistic_id": { "name": "Statistiek-ID" }
+        }
+      },
+      "last_readout": {
+        "name": "Laatste uitlezing",
+        "state_attributes": {
+          "readout_date": { "name": "Uitleesdatum" },
+          "cumulative": { "name": "Seizoenstotaal" }
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth": {
+      "message": "mijnTED heeft de opgeslagen inloggegevens geweigerd."
+    },
+    "unexpected_page": {
+      "message": "mijnTED toonde een niet-ondersteunde inlogpagina bij stap {step}. Updates staan stil tot de integratie opnieuw is geladen."
+    },
+    "cannot_connect": {
+      "message": "Kon geen gegevens ophalen bij mijnTED: {error}"
+    }
+  },
+  "issues": {
+    "unexpected_sign_in_page": {
+      "title": "Inloggen bij mijnTED vraagt aandacht",
+      "description": "Het inloggen bij mijnTED voor {title} stopte op een niet-ondersteunde pagina (stap: {step}). Dat gebeurt bij tweestapsverificatie, een captcha, nieuwe gebruiksvoorwaarden of een gewijzigde inlogpagina. Log in op mijnted.nl in een browser, rond eventuele extra stappen af en laad de integratie daarna opnieuw. Tot die tijd staan updates stil."
+    },
+    "export_disabled": {
+      "title": "mijnTED-meterexport staat uit",
+      "description": "mijnTED biedt geen dagelijkse meterstanden voor woning {apartment}. De meters van deze woning worden overgeslagen tot de export in het portaal aan staat."
+    }
+  }
+}

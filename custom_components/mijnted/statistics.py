@@ -65,9 +65,7 @@ async def async_import_meter_statistics(hass: HomeAssistant, meters: list[Meter]
         for day, value, change in daily_changes(meter.days, previous_state):
             running_sum += change
             rows.append(
-                StatisticData(
-                    start=dt_util.start_of_local_day(day), state=value, sum=running_sum
-                )
+                StatisticData(start=dt_util.start_of_local_day(day), state=value, sum=running_sum)
             )
         metadata = StatisticMetaData(
             mean_type=StatisticMeanType.NONE,

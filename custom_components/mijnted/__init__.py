@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import aiohttp
-
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.util import dt as dt_util
 
 from .api import MijntedClient
 from .coordinator import MijntedConfigEntry, MijntedCoordinator
@@ -17,7 +17,7 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 def create_client(hass: HomeAssistant, email: str, password: str) -> MijntedClient:
     """Create a client with its own cookie jar, detached when the entry unloads."""
     session = async_create_clientsession(hass, cookie_jar=aiohttp.CookieJar())
-    return MijntedClient(session, email, password, hass.config.time_zone_info)
+    return MijntedClient(session, email, password, dt_util.get_default_time_zone())
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: MijntedConfigEntry) -> bool:

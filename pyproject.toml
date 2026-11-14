@@ -1,5 +1,5 @@
 [project]
-name = "mijnted-ha"
+name = "ha-mijnted"
 version = "0.1.0"
 description = "Home Assistant custom integration for Techem heat cost allocators via mijnTED"
 requires-python = ">=3.13"
@@ -39,3 +39,8 @@ packages = ["custom_components.mijnted"]
 [[tool.mypy.overrides]]
 module = ["pytest_homeassistant_custom_component.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Home Assistant re-exports helpers such as recorder.get_instance without __all__.
+module = ["homeassistant.*"]
+implicit_reexport = true

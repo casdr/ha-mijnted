@@ -1,0 +1,8 @@
+{
+  "entity": {
+    "sensor": {
+      "cumulative": { "default": "mdi:radiator" },
+      "last_readout": { "default": "mdi:calendar-check" }
+    }
+  }
+}

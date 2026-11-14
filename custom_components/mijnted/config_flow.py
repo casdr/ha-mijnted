@@ -7,8 +7,6 @@ import logging
 from typing import Any
 
 import aiohttp
-import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
@@ -25,6 +23,8 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
+from homeassistant.util import dt as dt_util
+import probatio
 
 from .api import (
     MijntedAuthError,
@@ -53,11 +53,9 @@ PASSWORD_SELECTOR = TextSelector(
 
 async def validate_credentials(hass: HomeAssistant, email: str, password: str) -> str:
     """Sign in once and check the account has residential units. Returns the account id."""
-    session = async_create_clientsession(
-        hass, auto_cleanup=False, cookie_jar=aiohttp.CookieJar()
-    )
+    session = async_create_clientsession(hass, auto_cleanup=False, cookie_jar=aiohttp.CookieJar())
     try:
-        client = MijntedClient(session, email, password, hass.config.time_zone_info)
+        client = MijntedClient(session, email, password, dt_util.get_default_time_zone())
         account_id = await client.async_sign_in()
         if not await client.async_get_residential_unit_ids():
             raise NoResidentialUnitsError
@@ -94,9 +92,7 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Ask for e-mail and password."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -112,10 +108,10 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(
+                probatio.Schema(
                     {
-                        vol.Required(CONF_EMAIL): EMAIL_SELECTOR,
-                        vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
+                        probatio.Required(CONF_EMAIL): EMAIL_SELECTOR,
+                        probatio.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
                     }
                 ),
                 {CONF_EMAIL: user_input[CONF_EMAIL]} if user_input else {},
@@ -145,7 +141,7 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR}),
+            data_schema=probatio.Schema({probatio.Required(CONF_PASSWORD): PASSWORD_SELECTOR}),
             description_placeholders={"email": entry.data[CONF_EMAIL]},
             errors=errors,
         )
@@ -170,10 +166,10 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(
+                probatio.Schema(
                     {
-                        vol.Required(CONF_EMAIL): EMAIL_SELECTOR,
-                        vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
+                        probatio.Required(CONF_EMAIL): EMAIL_SELECTOR,
+                        probatio.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
                     }
                 ),
                 {CONF_EMAIL: user_input[CONF_EMAIL] if user_input else entry.data[CONF_EMAIL]},
@@ -191,9 +187,7 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
 class MijntedOptionsFlow(OptionsFlowWithReload):
     """Options: update interval."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Set the update interval in hours."""
         if user_input is not None:
             return self.async_create_entry(
@@ -202,9 +196,9 @@ class MijntedOptionsFlow(OptionsFlowWithReload):
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(
+                probatio.Schema(
                     {
-                        vol.Required(CONF_UPDATE_INTERVAL): NumberSelector(
+                        probatio.Required(CONF_UPDATE_INTERVAL): NumberSelector(
                             NumberSelectorConfig(
                                 min=MIN_UPDATE_INTERVAL_HOURS,
                                 max=MAX_UPDATE_INTERVAL_HOURS,
