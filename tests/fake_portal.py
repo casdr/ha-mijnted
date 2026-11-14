@@ -40,6 +40,7 @@ class FakePortal:
     """
 
     def __init__(self) -> None:
+        """Start without values or failures."""
         self.statuses = [
             DeviceStatus(
                 device_number=item["deviceNumber"],
@@ -61,10 +62,11 @@ class FakePortal:
 
     @property
     def devices(self) -> list[str]:
+        """Device numbers of the meters."""
         return [status.device_number for status in self.statuses]
 
     def set_day(self, day: date, value: float, device: str | None = None) -> None:
-        """Set one device (default: the first) on a day; other devices copy earlier values."""
+        """Set a day's value of one device, by default the first."""
         device = device or self.devices[0]
         self.values.setdefault(day, {})[device] = value
 
@@ -73,48 +75,66 @@ class FakePortal:
             raise self.fail_with
 
     async def async_sign_in(self) -> str:
+        """Count the sign-in and return the account id."""
         self.sign_ins += 1
         self._check()
         return ACCOUNT_ID
 
     async def async_get_residential_unit_ids(self) -> list[int]:
+        """Return the one residential unit."""
         self._check()
         return [UNIT_ID]
 
     async def async_get_residential_unit(self, unit_id: int) -> ResidentialUnit:
-        return ResidentialUnit(unit_id, BILLING_UNIT_ID, "1", self.export_active)
+        """Return the residential unit and its billing unit."""
+        return ResidentialUnit(
+            id=unit_id,
+            billing_unit_id=BILLING_UNIT_ID,
+            apartment_no="1",
+            export_active=self.export_active,
+        )
 
-    async def async_get_delivery_types(self, unit_id: int) -> list[int]:
+    async def async_get_delivery_types(self, _unit_id: int) -> list[int]:
+        """Return heating as the only delivery type."""
         return [1]
 
-    async def async_get_billing_periods(self, unit_id: int) -> list[BillingPeriod]:
-        return [BillingPeriod(date(2026, 6, 1), date(2027, 5, 31), True)]
+    async def async_get_billing_periods(self, _unit_id: int) -> list[BillingPeriod]:
+        """Return the 2026/2027 heating season."""
+        return [BillingPeriod(date(2026, 6, 1), date(2027, 5, 31), active=True)]
 
-    async def async_get_model(self, unit_id: int, delivery_type: int) -> str | None:
+    async def async_get_model(self, _unit_id: int, _delivery_type: int) -> str | None:
+        """Return the meter model."""
         return "F71"
 
     async def async_get_last_sync_date(
-        self, unit_id: int, delivery_type: int, year: int
+        self, _unit_id: int, _delivery_type: int, _year: int
     ) -> date | None:
+        """Return the last readout date."""
         return self.last_sync
 
     async def async_get_device_statuses(
-        self, unit_id: int, delivery_type: int, year: int, from_date: date
+        self, _unit_id: int, _delivery_type: int, _year: int, _from_date: date
     ) -> list[DeviceStatus]:
+        """Return the meters from the recorded fixture."""
         return self.statuses
 
     async def async_get_days(
-        self, billing_unit_id: int, unit_id: int, days: list[date]
+        self, _billing_unit_id: int, _unit_id: int, days: list[date]
     ) -> dict[date, dict[str, float]]:
+        """Return the export of each day and record which days were asked."""
         self._check()
         self.fetched_days.extend(days)
         return {day: self._export(day) for day in days}
 
     def _export(self, day: date) -> dict[str, float]:
-        """Like the portal: a day without its own value repeats the newest earlier value."""
+        """Export a day: a day without its own value repeats the newest earlier one."""
         result: dict[str, float] = {}
         for device in self.devices:
-            earlier = [d for d in self.values if d <= day and device in self.values[d]]
+            earlier = [
+                (d, values[device])
+                for d, values in self.values.items()
+                if d <= day and device in values
+            ]
             if earlier:
-                result[device] = self.values[max(earlier)][device]
+                result[device] = max(earlier)[1]
         return result

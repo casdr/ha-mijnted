@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+# pylint: disable=protected-access
 import asyncio
 import base64
 import json
 import re
-from collections.abc import AsyncGenerator
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -17,7 +17,6 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
     AiohttpClientMockResponse,
 )
-from yarl import URL
 
 from custom_components.mijnted.api import (
     MijntedAuthError,
@@ -36,6 +35,11 @@ from .fake_portal import (
     load_text,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from yarl import URL
+
 TZ = ZoneInfo("Europe/Amsterdam")
 AUTHORIZE = re.compile(r"/oauth2/v2\.0/authorize")
 SELF_ASSERTED = re.compile(r"/SelfAsserted")
@@ -45,24 +49,30 @@ API = "https://ted-prod-function-app.azurewebsites.net/api"
 
 
 def fake_jwt(claims: dict[str, object]) -> str:
-    """An unsigned JWT; the client only reads claims."""
+    """Return an unsigned JWT; the client only reads its claims."""
 
     def part(data: dict[str, object]) -> str:
+        """Encode one JWT part."""
         return base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode()
 
     return f"{part({'alg': 'none'})}.{part(claims)}.sig"
 
 
 class TokenEndpoint:
-    """Answers the B2C token endpoint by grant type; set `refuse_refresh` to reject refreshes."""
+    """The B2C token endpoint, answering by grant type.
+
+    Set `refuse_refresh` to reject the next refresh.
+    """
 
     def __init__(self) -> None:
+        """Start with no grants recorded."""
         self.grants: list[dict[str, Any]] = []
         self.refuse_refresh = False
 
     async def __call__(
         self, method: str, url: URL, data: Any
     ) -> AiohttpClientMockResponse:
+        """Answer one token request."""
         self.grants.append(dict(data))
         if data["grant_type"] == "authorization_code":
             body: dict[str, Any] = {
@@ -84,20 +94,23 @@ class TokenEndpoint:
         return AiohttpClientMockResponse(method, url, json=body)
 
 
-@pytest.fixture
-def mocker() -> AiohttpClientMocker:
+@pytest.fixture(name="mocker")
+def mocker_fixture() -> AiohttpClientMocker:
+    """Return an HTTP mocker for a plain aiohttp session."""
     return AiohttpClientMocker()
 
 
-@pytest.fixture
-async def client(mocker: AiohttpClientMocker) -> AsyncGenerator[MijntedClient]:
+@pytest.fixture(name="client")
+async def client_fixture(mocker: AiohttpClientMocker) -> AsyncGenerator[MijntedClient]:
+    """Return a client on a session bound to the mocker."""
     session = mocker.create_session(asyncio.get_running_loop())
     yield MijntedClient(session, EMAIL, PASSWORD, TZ)
     await session.close()
 
 
-@pytest.fixture
-def token_endpoint() -> TokenEndpoint:
+@pytest.fixture(name="token_endpoint")
+def token_endpoint_fixture() -> TokenEndpoint:
+    """Return a token endpoint that answers by grant type."""
     return TokenEndpoint()
 
 
@@ -109,6 +122,7 @@ def mock_sign_in(
     self_asserted: str = '{"status":"200"}',
     confirmed_status: int = 302,
 ) -> None:
+    """Mock the four sign-in requests and the token endpoint."""
     mocker.get(AUTHORIZE, text=load_text("authorize.html") if page is None else page)
     mocker.post(SELF_ASSERTED, text=self_asserted)
     mocker.get(
@@ -125,13 +139,14 @@ def mock_sign_in(
 
 
 def calls_to(mocker: AiohttpClientMocker, fragment: str) -> list[tuple[Any, ...]]:
+    """Return the recorded calls whose URL contains `fragment`."""
     return [call for call in mocker.mock_calls if fragment in str(call[1])]
 
 
 async def test_sign_in_happy_path(
     client: MijntedClient, mocker: AiohttpClientMocker, token_endpoint: TokenEndpoint
 ) -> None:
-    """A full sign-in posts the credentials with the page's CSRF token and gets an API token."""
+    """Test a full sign-in posts the credentials with the page's CSRF token."""
     mock_sign_in(mocker, token_endpoint)
     assert await client.async_sign_in() == ACCOUNT_ID
 
@@ -179,6 +194,7 @@ async def test_unexpected_authorize_page(
     token_endpoint: TokenEndpoint,
     page: str,
 ) -> None:
+    """Test unexpected authorize page."""
     mock_sign_in(mocker, token_endpoint, page=page)
     with pytest.raises(MijntedUnexpectedPageError) as err:
         await client.async_sign_in()
@@ -189,7 +205,7 @@ async def test_unexpected_authorize_page(
 async def test_extra_step_after_credentials(
     client: MijntedClient, mocker: AiohttpClientMocker, token_endpoint: TokenEndpoint
 ) -> None:
-    """A page instead of the redirect after confirming (MFA, terms of use) is unexpected."""
+    """Test a page instead of the redirect after confirming is unexpected."""
     mock_sign_in(mocker, token_endpoint, confirmed_status=200)
     with pytest.raises(MijntedUnexpectedPageError) as err:
         await client.async_sign_in()
@@ -199,6 +215,7 @@ async def test_extra_step_after_credentials(
 async def test_server_error_is_transient(
     client: MijntedClient, mocker: AiohttpClientMocker
 ) -> None:
+    """Test server error is transient."""
     mocker.get(AUTHORIZE, status=503, text="busy")
     with pytest.raises(MijntedConnectionError):
         await client.async_sign_in()
@@ -207,6 +224,7 @@ async def test_server_error_is_transient(
 async def test_network_error_is_transient(
     client: MijntedClient, mocker: AiohttpClientMocker
 ) -> None:
+    """Test network error is transient."""
     mocker.get(AUTHORIZE, exc=aiohttp.ClientConnectionError("boom"))
     with pytest.raises(MijntedConnectionError):
         await client.async_sign_in()
@@ -227,6 +245,7 @@ async def test_token_is_reused(
 async def test_expired_access_token_uses_refresh_token(
     client: MijntedClient, mocker: AiohttpClientMocker, token_endpoint: TokenEndpoint
 ) -> None:
+    """Test expired access token uses refresh token."""
     mock_sign_in(mocker, token_endpoint)
     mocker.get(f"{API}/profiles/me/access", json=load_json("access.json"))
     await client.async_sign_in()
@@ -243,6 +262,7 @@ async def test_expired_access_token_uses_refresh_token(
 async def test_refused_refresh_falls_back_to_sign_in(
     client: MijntedClient, mocker: AiohttpClientMocker, token_endpoint: TokenEndpoint
 ) -> None:
+    """Test refused refresh falls back to sign in."""
     mock_sign_in(mocker, token_endpoint)
     mocker.get(f"{API}/profiles/me/access", json=load_json("access.json"))
     await client.async_sign_in()
@@ -257,6 +277,7 @@ async def test_refused_refresh_falls_back_to_sign_in(
 async def test_rejected_api_token_is_dropped(
     client: MijntedClient, mocker: AiohttpClientMocker, token_endpoint: TokenEndpoint
 ) -> None:
+    """Test rejected api token is dropped."""
     mock_sign_in(mocker, token_endpoint)
     mocker.get(f"{API}/profiles/me/access", status=401)
     with pytest.raises(MijntedConnectionError):
@@ -267,6 +288,7 @@ async def test_rejected_api_token_is_dropped(
 async def test_discovery_endpoints(
     client: MijntedClient, mocker: AiohttpClientMocker, token_endpoint: TokenEndpoint
 ) -> None:
+    """Test discovery endpoints."""
     mock_sign_in(mocker, token_endpoint)
     mocker.get(
         f"{API}/residentialUnitDetailItem/{UNIT_ID}",

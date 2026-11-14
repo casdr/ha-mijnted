@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import TYPE_CHECKING
 
 import pytest
-from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from .fake_portal import FakePortal
 from .helpers import at, fill, refresh, setup_entry, state
+
+if TYPE_CHECKING:
+    from freezegun.api import FrozenDateTimeFactory
+    from homeassistant.core import HomeAssistant
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from .fake_portal import FakePortal
 
 pytestmark = pytest.mark.usefixtures("amsterdam")
 
@@ -23,7 +27,7 @@ async def test_lagging_data_uses_last_readout(
     portal: FakePortal,
     config_entry: MockConfigEntry,
 ) -> None:
-    """On Sunday the portal is read out up to Friday; Saturday repeats Friday and is skipped."""
+    """Test Sunday's data: read out up to Friday, Saturday repeats Friday."""
     at(freezer, "2026-11-15 10:00:00")
     fill(portal, date(2026, 11, 10), [10, 12, 17, 22])
     portal.last_sync = date(2026, 11, 13)
@@ -50,7 +54,7 @@ async def test_weekend_backfill_on_monday(
     portal: FakePortal,
     config_entry: MockConfigEntry,
 ) -> None:
-    """Saturday and Sunday arrive on Monday with their own values; old days are not refetched."""
+    """Test the weekend arriving on Monday, each day with its own value."""
     at(freezer, "2026-11-14 12:00:00")
     fill(portal, date(2026, 11, 10), [10, 12, 17, 22])
     portal.last_sync = date(2026, 11, 13)
@@ -68,7 +72,8 @@ async def test_weekend_backfill_on_monday(
     assert meter.days[date(2026, 11, 14)] == 26
     assert meter.days[date(2026, 11, 15)] == 31
     assert meter.days[date(2026, 11, 16)] == 33
-    # Days before Friday's readout were final and cached; Friday itself is fetched again.
+    # Days before Friday's readout were final and cached; Friday itself is fetched
+    # again.
     assert sorted(portal.fetched_days) == [date(2026, 11, d) for d in (13, 14, 15, 16)]
     assert float(state(hass, portal.devices[0], "last_readout").state) == 2
 
@@ -80,7 +85,7 @@ async def test_season_reset(
     portal: FakePortal,
     config_entry: MockConfigEntry,
 ) -> None:
-    """The counter restarts at zero; the readout counts the new value, not a negative change."""
+    """Test the counter restarting at zero counts the new value, not a drop."""
     at(freezer, "2026-06-01 09:00:00")
     fill(portal, date(2026, 5, 28), [487, 489, 489, 3])
     portal.last_sync = date(2026, 5, 31)
@@ -116,6 +121,7 @@ async def test_no_readout_yet(
     portal: FakePortal,
     config_entry: MockConfigEntry,
 ) -> None:
+    """Test no readout yet."""
     at(freezer, "2026-11-14 12:00:00")
     portal.last_sync = None
     await setup_entry(hass, config_entry)

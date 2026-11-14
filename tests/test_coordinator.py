@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 import pytest
-from freezegun.api import FrozenDateTimeFactory
-from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mijnted.api import (
     MijntedConnectionError,
     MijntedUnexpectedPageError,
+    SignInStep,
 )
 
-from .fake_portal import FakePortal
 from .helpers import at, refresh, setup_entry
+
+if TYPE_CHECKING:
+    from freezegun.api import FrozenDateTimeFactory
+    from homeassistant.core import HomeAssistant
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from .fake_portal import FakePortal
 
 pytestmark = pytest.mark.usefixtures("amsterdam")
 
@@ -27,11 +32,12 @@ async def test_unexpected_page_later_stops_polling(
     portal: FakePortal,
     config_entry: MockConfigEntry,
 ) -> None:
+    """Test unexpected page later stops polling."""
     at(freezer, "2026-11-14 12:00:00")
     await setup_entry(hass, config_entry)
     coordinator = config_entry.runtime_data
 
-    portal.fail_with = MijntedUnexpectedPageError("authorize")
+    portal.fail_with = MijntedUnexpectedPageError(SignInStep.AUTHORIZE)
     await refresh(hass, config_entry)
     assert coordinator.update_interval is None
     assert not coordinator.last_update_success
@@ -50,6 +56,7 @@ async def test_transient_errors_back_off(
     portal: FakePortal,
     config_entry: MockConfigEntry,
 ) -> None:
+    """Test transient errors back off."""
     at(freezer, "2026-11-14 12:00:00")
     await setup_entry(hass, config_entry)
     coordinator = config_entry.runtime_data
