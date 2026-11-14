@@ -141,6 +141,16 @@ class DeviceStatus:
     deactivation_date: str | None
 
 
+def create_cookie_jar() -> aiohttp.CookieJar:
+    """Return a cookie jar that sends cookie values exactly as the server set them.
+
+    Azure B2C's x-ms-cpim-* cookies are base64 and contain "=", "/" and "+". By
+    default aiohttp quotes such values when sending them back. B2C then reads a CSRF
+    cookie that does not match the X-CSRF-TOKEN header and rejects the sign-in.
+    """
+    return aiohttp.CookieJar(quote_cookie=False)
+
+
 def _b64url(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 

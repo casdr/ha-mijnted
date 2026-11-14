@@ -84,12 +84,14 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
         try:
             data = await self._async_fetch()
         except MijntedAuthError as err:
+            _LOGGER.debug("Update: credentials rejected (%s)", err)
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN, translation_key="invalid_auth"
             ) from err
         except MijntedUnexpectedPageError as err:
             # Signing in again would show the same page. Stop polling until the entry is
             # reloaded, and tell the user through a repair issue.
+            _LOGGER.debug("Update: %s", err)
             self.update_interval = None
             ir.async_create_issue(
                 self.hass,
@@ -109,6 +111,7 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
                 translation_placeholders={"step": err.step},
             ) from err
         except MijntedConnectionError as err:
+            _LOGGER.debug("Update: cannot connect (%s)", err)
             self._failures += 1
             self.update_interval = min(
                 self._base_interval * 2**self._failures, MAX_BACKOFF

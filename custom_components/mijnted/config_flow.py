@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-import aiohttp
 import probatio
 from homeassistant.config_entries import (
     ConfigFlow,
@@ -30,6 +29,7 @@ from .api import (
     MijntedClient,
     MijntedConnectionError,
     MijntedUnexpectedPageError,
+    create_cookie_jar,
 )
 from .const import (
     CONF_UPDATE_INTERVAL,
@@ -57,7 +57,7 @@ PASSWORD_SELECTOR = TextSelector(
 async def validate_credentials(hass: HomeAssistant, email: str, password: str) -> str:
     """Sign in once, check for residential units and return the account id."""
     session = async_create_clientsession(
-        hass, auto_cleanup=False, cookie_jar=aiohttp.CookieJar()
+        hass, auto_cleanup=False, cookie_jar=create_cookie_jar()
     )
     try:
         client = MijntedClient(
@@ -78,14 +78,21 @@ class NoResidentialUnitsError(Exception):
 async def _errors_for(
     hass: HomeAssistant, email: str, password: str
 ) -> tuple[str | None, dict[str, str]]:
-    """Validate credentials and map failures to form errors."""
+    """Validate credentials and map failures to form errors.
+
+    Error messages hold only a step name, HTTP status or exception type, so they
+    are logged at debug level to explain the form error.
+    """
     try:
         return await validate_credentials(hass, email, password), {}
-    except MijntedAuthError:
+    except MijntedAuthError as err:
+        _LOGGER.debug("Sign-in check: credentials rejected (%s)", err)
         return None, {"base": "invalid_auth"}
-    except MijntedUnexpectedPageError:
+    except MijntedUnexpectedPageError as err:
+        _LOGGER.debug("Sign-in check: %s", err)
         return None, {"base": "unexpected_page"}
-    except MijntedConnectionError:
+    except MijntedConnectionError as err:
+        _LOGGER.debug("Sign-in check: cannot connect (%s)", err)
         return None, {"base": "cannot_connect"}
     except NoResidentialUnitsError:
         return None, {"base": "no_residential_units"}

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import aiohttp
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.util import dt as dt_util
 
-from .api import MijntedClient
+from .api import MijntedClient, create_cookie_jar
 from .const import MANUFACTURER
 from .coordinator import MijntedConfigEntry, MijntedCoordinator
 from .entity import unit_device_identifier
@@ -24,7 +23,7 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 def create_client(hass: HomeAssistant, email: str, password: str) -> MijntedClient:
     """Create a client with its own cookie jar, detached when the entry unloads."""
-    session = async_create_clientsession(hass, cookie_jar=aiohttp.CookieJar())
+    session = async_create_clientsession(hass, cookie_jar=create_cookie_jar())
     return MijntedClient(session, email, password, dt_util.get_default_time_zone())
 
 
