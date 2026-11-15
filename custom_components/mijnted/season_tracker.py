@@ -21,6 +21,7 @@ from .const import DOMAIN
 from .seasons import SeasonHistory, async_find_seasons, is_reset, reset_after
 from .statistics import (
     async_import_household,
+    async_import_meter_previous_seasons,
     async_import_previous_season,
     household_statistic_id,
     previous_season_statistic_id,
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .api import MijntedClient
-    from .models import ResidentialUnitInfo
+    from .models import Meter, MijntedData, ResidentialUnitInfo
     from .seasons import PreviousSeason
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,6 +61,17 @@ def _complete_days(
         for day, total in totals.items()
         if meters <= meters_by_day.get(day, set())
     }
+
+
+def _per_meter(
+    days: dict[date, float], values_by_day: dict[date, dict[str, float]]
+) -> dict[str, dict[date, float]]:
+    """Each meter's values on the given days, from the fetched exports."""
+    meters: dict[str, dict[date, float]] = {}
+    for day in sorted(days):
+        for device_number, value in values_by_day.get(day, {}).items():
+            meters.setdefault(device_number, {})[day] = value
+    return meters
 
 
 class SeasonTracker:
@@ -89,6 +101,8 @@ class SeasonTracker:
         self._pending: set[int] = set()
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._loaded = False
+        # The meters of the last update, to name the per-meter statistics.
+        self._meters: dict[str, Meter] = {}
 
     def previous(self, unit_id: int) -> PreviousSeason | None:
         """Return the previous season of a unit, None while unknown."""
@@ -105,16 +119,14 @@ class SeasonTracker:
         """Whether a previous season is being fetched."""
         return any(not task.done() for task in self._tasks.values())
 
-    async def async_update(
-        self,
-        units: dict[int, ResidentialUnitInfo],
-        totals: dict[int, dict[date, float]],
-    ) -> None:
+    async def async_update(self, data: MijntedData) -> None:
         """Check each unit after a coordinator update; start fetching when needed."""
         if not self._loaded:
             await self._async_load()
+        units = data.units
+        self._meters = data.meters
         for unit_id, unit in units.items():
-            unit_totals = totals.get(unit_id, {})
+            unit_totals = data.totals.get(unit_id, {})
             if unit_id not in self._imported and self.previous(unit_id):
                 await self._async_import(unit_id, units)
             if not unit_totals:
@@ -128,6 +140,9 @@ class SeasonTracker:
     def _needs_backfill(self, unit_id: int, totals: dict[date, float]) -> bool:
         history = self._history.get(unit_id)
         if history is None or unit_id in self._pending:
+            return True
+        if history.previous and not history.previous.meters:
+            # Stored before the meters were kept: fetch once more to get them.
             return True
         if reset_after(totals, history.current_start) is not None:
             return True
@@ -163,14 +178,14 @@ class SeasonTracker:
         units: dict[int, ResidentialUnitInfo],
     ) -> None:
         """Find the seasons of a unit and fetch the previous one, throttled."""
-        meters_by_day: dict[date, set[str]] = {}
+        values_by_day: dict[date, dict[str, float]] = {}
 
         async def fetch(day: date) -> float | None:
             await asyncio.sleep(BACKFILL_DELAY)
             values = await self._client.async_get_day_values(
                 billing_unit_id, unit_id, day
             )
-            meters_by_day[day] = set(values)
+            values_by_day[day] = values
             return sum(values.values()) if values else None
 
         _LOGGER.debug("Fetching the previous season")
@@ -184,6 +199,8 @@ class SeasonTracker:
                 err,
             )
             return
+        if history.previous:
+            history.previous.meters = _per_meter(history.previous.days, values_by_day)
         self._history[unit_id] = history
         self._pending.discard(unit_id)
         await self._store.async_save(self._as_dict())
@@ -193,7 +210,10 @@ class SeasonTracker:
         await async_import_household(
             self._hass,
             household_statistic_id(unit_id, only_unit=len(units) == 1),
-            _complete_days(history.current_days, meters_by_day),
+            _complete_days(
+                history.current_days,
+                {day: set(values) for day, values in values_by_day.items()},
+            ),
         )
         _LOGGER.debug(
             "Current season started %s, previous season has %d days",
@@ -210,6 +230,9 @@ class SeasonTracker:
             return
         stat_id = previous_season_statistic_id(unit_id, only_unit=len(units) == 1)
         await async_import_previous_season(self._hass, stat_id, previous)
+        await async_import_meter_previous_seasons(
+            self._hass, previous, self._meters, self._entry.entry_id
+        )
         self._imported.add(unit_id)
 
     async def _async_load(self) -> None:

@@ -55,7 +55,7 @@ async def test_boundaries_from_a_reset_in_june() -> None:
     assert previous is not None
     assert previous.start == date(2025, 6, 2)
     assert previous.end == date(2026, 6, 1)
-    assert previous.final_total == 489
+    assert previous.final_total() == 489
     assert previous.days == PREVIOUS
     assert history.current_days == CURRENT
     # Every day of both seasons once, plus the day before them that ends the search.
@@ -129,10 +129,35 @@ def test_reset_detection() -> None:
     assert reset_after(window, date(2027, 6, 2)) is None
 
 
+def test_per_meter_values() -> None:
+    """Test a meter's to-date and final value, and a meter that was not there."""
+    meter = ramp(date(2025, 6, 2), date(2026, 6, 1), 120)
+    season = PreviousSeason(
+        date(2025, 6, 2), date(2026, 6, 1), dict(PREVIOUS), {"90000001": meter}
+    )
+    assert season.to_date(date(2025, 11, 15), "90000001") == meter[date(2025, 11, 15)]
+    assert season.to_date(date(2025, 5, 1), "90000001") == 0
+    assert season.final_total("90000001") == 120
+    assert season.to_date(date(2025, 11, 15), "90000009") is None
+    assert season.final_total("90000009") is None
+
+
 def test_storage_round_trip() -> None:
-    """Test a season history survives being stored."""
+    """Test a season history survives being stored, with and without meters."""
     history = SeasonHistory(
         current_start=date(2026, 6, 2),
-        previous=PreviousSeason(date(2025, 6, 2), date(2026, 6, 1), dict(PREVIOUS)),
+        previous=PreviousSeason(
+            date(2025, 6, 2),
+            date(2026, 6, 1),
+            dict(PREVIOUS),
+            {"90000001": dict(PREVIOUS)},
+        ),
     )
-    assert SeasonHistory.from_dict(history.as_dict()) == history
+    stored = history.as_dict()
+    assert SeasonHistory.from_dict(stored) == history
+
+    # As stored by 0.2.0, before the meters were kept.
+    del stored["previous"]["meters"]
+    restored = SeasonHistory.from_dict(stored)
+    assert restored.previous is not None
+    assert restored.previous.meters == {}

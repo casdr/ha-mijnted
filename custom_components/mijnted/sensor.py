@@ -9,15 +9,18 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 
-from .const import UNIT_UNITS
+from .const import CONF_PRICE_PER_UNIT, DOMAIN, UNIT_UNITS
 from .entity import (
     MijntedMeterEntity,
     MijntedUnitEntity,
@@ -25,7 +28,7 @@ from .entity import (
     async_add_unit_entities,
 )
 from .seasons import one_year_earlier, one_year_later
-from .statistics import statistic_id
+from .statistics import meter_previous_season_statistic_id, statistic_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -81,26 +84,70 @@ SENSORS: tuple[MijntedSensorDescription, ...] = (
 
 
 async def async_setup_entry(
-    _hass: HomeAssistant,
+    hass: HomeAssistant,
     entry: MijntedConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the sensors of every meter and every residential unit."""
+    price = float(entry.options.get(CONF_PRICE_PER_UNIT) or 0)
+    if not price:
+        _remove_cost_sensors(hass, entry)
     async_add_meter_entities(
         entry,
         async_add_entities,
         lambda coordinator, number: [
-            MijntedSensor(coordinator, number, description) for description in SENSORS
+            *(
+                MijntedSensor(coordinator, number, description)
+                for description in SENSORS
+            ),
+            MeterPreviousSeasonToDateSensor(coordinator, number),
         ],
     )
-    async_add_unit_entities(
-        entry,
-        async_add_entities,
-        lambda coordinator, unit_id: [
+
+    def unit_sensors(
+        coordinator: MijntedCoordinator, unit_id: int
+    ) -> list[SensorEntity]:
+        sensors: list[SensorEntity] = [
             PreviousSeasonToDateSensor(coordinator, unit_id),
             PreviousSeasonTotalSensor(coordinator, unit_id),
-        ],
-    )
+        ]
+        if price:
+            sensors.append(SeasonCostSensor(coordinator, unit_id, price))
+        return sensors
+
+    async_add_unit_entities(entry, async_add_entities, unit_sensors)
+
+
+def _remove_cost_sensors(hass: HomeAssistant, entry: MijntedConfigEntry) -> None:
+    """Remove the cost estimate after its price was cleared in the options."""
+    registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.platform == DOMAIN and entity.unique_id.endswith(
+            f"_{SeasonCostSensor.key}"
+        ):
+            registry.async_remove(entity.entity_id)
+
+
+class _WriteAtMidnight(Entity):
+    """Writes its state just after midnight, for values that move with the date."""
+
+    async def async_added_to_hass(self) -> None:
+        """Start writing the state at midnight."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_time_change(
+                self.hass, self._async_new_day, hour=0, minute=0, second=5
+            )
+        )
+
+    @callback
+    def _async_new_day(self, _now: datetime) -> None:
+        self.async_write_ha_state()
+
+
+def _comparison_date() -> date:
+    """Today's date one year earlier: the day the previous season is compared on."""
+    return one_year_earlier(dt_util.now().date())
 
 
 class MijntedSensor(MijntedMeterEntity, SensorEntity):
@@ -161,7 +208,7 @@ class _PreviousSeasonSensor(MijntedUnitEntity, SensorEntity):
         }
 
 
-class PreviousSeasonToDateSensor(_PreviousSeasonSensor):
+class PreviousSeasonToDateSensor(_WriteAtMidnight, _PreviousSeasonSensor):
     """Previous season's total on today's date one year earlier.
 
     The value changes at midnight, so the sensor writes its state then as well.
@@ -170,26 +217,13 @@ class PreviousSeasonToDateSensor(_PreviousSeasonSensor):
     _key = "previous_season_to_date"
     _attr_state_class = SensorStateClass.TOTAL
 
-    async def async_added_to_hass(self) -> None:
-        """Write the state again just after midnight."""
-        await super().async_added_to_hass()
-        self.async_on_remove(
-            async_track_time_change(
-                self.hass, self._async_new_day, hour=0, minute=0, second=5
-            )
-        )
-
-    @callback
-    def _async_new_day(self, _now: datetime) -> None:
-        self.async_write_ha_state()
-
     @property
     def native_value(self) -> float | None:
         """Return the previous season's total on this date last year."""
         previous = self.previous
         if previous is None:
             return None
-        return previous.to_date(one_year_earlier(dt_util.now().date()))
+        return previous.to_date(_comparison_date())
 
     @property
     def last_reset(self) -> datetime | None:
@@ -204,9 +238,7 @@ class PreviousSeasonToDateSensor(_PreviousSeasonSensor):
         """Return the compared date and the previous season's first and last day."""
         attributes = super().extra_state_attributes
         if attributes is not None:
-            attributes["comparison_date"] = one_year_earlier(
-                dt_util.now().date()
-            ).isoformat()
+            attributes["comparison_date"] = _comparison_date().isoformat()
         return attributes
 
 
@@ -219,4 +251,97 @@ class PreviousSeasonTotalSensor(_PreviousSeasonSensor):
     def native_value(self) -> float | None:
         """Return the previous season's final total."""
         previous = self.previous
-        return previous.final_total if previous else None
+        return previous.final_total() if previous else None
+
+
+class MeterPreviousSeasonToDateSensor(
+    _WriteAtMidnight, MijntedMeterEntity, SensorEntity
+):
+    """A meter's previous-season value on today's date one year earlier.
+
+    Unknown while the previous season is being fetched, and for a meter that was
+    not there last season.
+    """
+
+    _attr_native_unit_of_measurement = UNIT_UNITS
+    _attr_suggested_display_precision = 0
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_translation_key = "previous_season_to_date"
+
+    def __init__(self, coordinator: MijntedCoordinator, device_number: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, device_number, "previous_season_to_date")
+
+    @property
+    def previous(self) -> PreviousSeason | None:
+        """The previous season of the meter's residential unit."""
+        meter = self.meter
+        if meter is None:
+            return None
+        return self.coordinator.seasons.previous(meter.residential_unit_id)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the meter's value on this date last season."""
+        previous = self.previous
+        if previous is None:
+            return None
+        return previous.to_date(_comparison_date(), self._device_number)
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """Return when the previous season's counting started, a year later."""
+        previous = self.previous
+        if previous is None:
+            return None
+        return dt_util.start_of_local_day(one_year_later(previous.start))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the compared date, the season and the statistic id."""
+        previous = self.previous
+        if previous is None:
+            return None
+        return {
+            "comparison_date": _comparison_date().isoformat(),
+            "season_start": previous.start.isoformat(),
+            "season_end": previous.end.isoformat(),
+            "statistic_id": meter_previous_season_statistic_id(self._device_number),
+        }
+
+
+class SeasonCostSensor(MijntedUnitEntity, SensorEntity):
+    """Estimated cost of this season's units, at the price set in the options.
+
+    Only the consumption part of a heating bill depends on the units; fixed costs
+    such as the share by floor area are not in it.
+    """
+
+    key = "season_cost"
+    _attr_translation_key = "season_cost"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_suggested_display_precision = 2
+
+    def __init__(
+        self, coordinator: MijntedCoordinator, unit_id: int, price: float
+    ) -> None:
+        """Initialize the sensor with the price per unit."""
+        super().__init__(coordinator, unit_id, self.key)
+        self._price = price
+        self._attr_native_unit_of_measurement = coordinator.hass.config.currency
+
+    @property
+    def _season_total(self) -> float | None:
+        totals = self.coordinator.data.totals.get(self._unit_id)
+        return totals[max(totals)] if totals else None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the season total times the price."""
+        total = self._season_total
+        return None if total is None else round(total * self._price, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the price and the season total it is based on."""
+        return {"price_per_unit": self._price, "season_total": self._season_total}

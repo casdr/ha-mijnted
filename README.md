@@ -14,6 +14,16 @@ day each value belongs to.
     (`state_class: total_increasing`).
   - **Last readout**: units added on the last day Techem read the meters out. The
     `readout_date` attribute gives that date.
+  - **Previous season to date**: the meter's value on today's date one year earlier
+    (see below).
+  - **Not reporting** (diagnostic): on when the portal lists the meter as
+    deactivated, or has no value for it on the last readout date.
+- Per apartment:
+  - **Data outdated** (diagnostic): on when the newest readout is more than 4 days
+    old. The portal is normally a day or two behind, so this means readings stopped
+    arriving.
+  - **Previous season to date** and **Previous season total** (see below).
+  - **Estimated cost this season**, when a price per unit is set (see Options).
 - An external statistic per meter, `mijnted:meter_<device number>`, and one for the
   household, `mijnted:total`, with one value per day, each on its own date. A meter's
   statistic is named after its device, so renaming the device in Home Assistant
@@ -36,7 +46,7 @@ Assistant configuration, restart, and add the integration as above.
 
 ## Comparing with the previous season
 
-Each apartment gets two sensors:
+Each apartment gets two sensors, for the household total:
 
 - **Previous season to date**: units the previous season had counted on today's date
   one year earlier (`state_class: total`). It moves on at midnight.
@@ -53,7 +63,12 @@ Two statistics hold the household total (all meters added up), one value per day
   last year ended up. 29 February is counted on 28 February.
 
 Accounts with more than one apartment get the apartment's id appended, for example
-`mijnted:total_153865`.
+`mijnted:total_100001`.
+
+The same comparison exists per meter: a **Previous season to date** sensor on each
+meter, and a statistic `mijnted:meter_<device number>_previous_season` next to
+`mijnted:meter_<device number>`, shifted one year in the same way. A meter that was
+not there last season has no value.
 
 ```yaml
 type: statistics-graph
@@ -97,8 +112,16 @@ the readout day.
 
 ## Options
 
-**Update interval**: hours between updates, 1 to 24 (default 6). mijnTED is updated
-about once a day, so updating more often does not give fresher data.
+- **Update interval**: hours between updates, 1 to 24 (default 6). mijnTED is updated
+  about once a day, so updating more often does not give fresher data.
+- **Price per unit**: the consumption cost per unit, for the **Estimated cost this
+  season** sensor. Leave it at 0 (the default) to leave the sensor out. The price is
+  on your annual heating statement (*jaarafrekening*): the consumption costs divided
+  by the units. Without a statement, a rough figure is the building's heating
+  consumption costs divided by all units in the building, or the price from your
+  previous home with the same supplier. The estimate covers only the part of the bill
+  that depends on the units. Fixed costs, such as the share by floor area, and your
+  advance payments are not in it.
 
 ## How it works
 
@@ -141,6 +164,11 @@ about once a day, so updating more often does not give fresher data.
   rather than documented.
 - On first install the statistic starts at the oldest of the 30 imported days, with a
   change of 0 on that day.
+- The portal shows no battery or error state of a meter. **Not reporting** can only
+  tell that a meter has no value. A meter whose value simply stops changing looks
+  the same as a radiator that is off, so it is not noticed.
+- Previous-season values per meter need one more backfill after updating from 0.2.0,
+  which runs once in the background.
 - Meter and room names come from the portal's room codes. Unknown codes are shown
   as-is.
 - Requires Home Assistant 2026.10 or newer.

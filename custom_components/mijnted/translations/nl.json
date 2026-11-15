@@ -55,15 +55,38 @@
       "init": {
         "title": "mijnTED-opties",
         "data": {
-          "update_interval": "Update-interval"
+          "update_interval": "Update-interval",
+          "price_per_unit": "Prijs per eenheid"
         },
         "data_description": {
-          "update_interval": "Aantal uur tussen updates. mijnTED wordt ongeveer eens per dag bijgewerkt."
+          "update_interval": "Aantal uur tussen updates. mijnTED wordt ongeveer eens per dag bijgewerkt.",
+          "price_per_unit": "Verbruikskosten per eenheid uit je jaarafrekening, voor de kostenschatting. Laat op 0 om de schatting weg te laten."
         }
       }
     }
   },
   "entity": {
+    "binary_sensor": {
+      "data_outdated": {
+        "name": "Gegevens verouderd",
+        "state_attributes": {
+          "last_readout_date": {
+            "name": "Laatste uitleesdatum"
+          }
+        }
+      },
+      "not_reporting": {
+        "name": "Meldt geen waarde",
+        "state_attributes": {
+          "last_value_date": {
+            "name": "Laatste datum met waarde"
+          },
+          "deactivation_date": {
+            "name": "Datum gedeactiveerd"
+          }
+        }
+      }
+    },
     "sensor": {
       "cumulative": {
         "name": "Seizoenstotaal",
@@ -98,6 +121,9 @@
           },
           "season_end": {
             "name": "Einde seizoen"
+          },
+          "statistic_id": {
+            "name": "Statistiek-ID"
           }
         }
       },
@@ -109,6 +135,17 @@
           },
           "season_end": {
             "name": "Einde seizoen"
+          }
+        }
+      },
+      "season_cost": {
+        "name": "Geschatte kosten dit seizoen",
+        "state_attributes": {
+          "price_per_unit": {
+            "name": "Prijs per eenheid"
+          },
+          "season_total": {
+            "name": "Seizoenstotaal"
           }
         }
       }

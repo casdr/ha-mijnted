@@ -32,6 +32,7 @@ from .api import (
     create_cookie_jar,
 )
 from .const import (
+    CONF_PRICE_PER_UNIT,
     CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL_HOURS,
     DOMAIN,
@@ -219,15 +220,20 @@ class MijntedConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class MijntedOptionsFlow(OptionsFlowWithReload):
-    """Options: update interval."""
+    """Options: update interval and the price per unit for the cost estimate."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Set the update interval in hours."""
+        """Set the update interval in hours and the price per unit."""
         if user_input is not None:
             return self.async_create_entry(
-                data={CONF_UPDATE_INTERVAL: int(user_input[CONF_UPDATE_INTERVAL])}
+                data={
+                    CONF_UPDATE_INTERVAL: int(user_input[CONF_UPDATE_INTERVAL]),
+                    CONF_PRICE_PER_UNIT: float(
+                        user_input.get(CONF_PRICE_PER_UNIT) or 0
+                    ),
+                }
             )
         return self.async_show_form(
             step_id="init",
@@ -242,13 +248,24 @@ class MijntedOptionsFlow(OptionsFlowWithReload):
                                 mode=NumberSelectorMode.BOX,
                                 unit_of_measurement="h",
                             )
-                        )
+                        ),
+                        probatio.Optional(CONF_PRICE_PER_UNIT): NumberSelector(
+                            NumberSelectorConfig(
+                                min=0,
+                                step="any",
+                                mode=NumberSelectorMode.BOX,
+                                unit_of_measurement=self.hass.config.currency,
+                            )
+                        ),
                     }
                 ),
                 {
                     CONF_UPDATE_INTERVAL: self.config_entry.options.get(
                         CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL_HOURS
-                    )
+                    ),
+                    CONF_PRICE_PER_UNIT: self.config_entry.options.get(
+                        CONF_PRICE_PER_UNIT, 0
+                    ),
                 },
             ),
         )

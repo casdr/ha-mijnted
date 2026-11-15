@@ -1,5 +1,19 @@
 {
   "entity": {
+    "binary_sensor": {
+      "data_outdated": {
+        "default": "mdi:update",
+        "state": {
+          "on": "mdi:clock-alert-outline"
+        }
+      },
+      "not_reporting": {
+        "default": "mdi:radiator",
+        "state": {
+          "on": "mdi:radiator-off"
+        }
+      }
+    },
     "sensor": {
       "cumulative": {
         "default": "mdi:radiator"
@@ -12,6 +26,9 @@
       },
       "previous_season_total": {
         "default": "mdi:history"
+      },
+      "season_cost": {
+        "default": "mdi:cash"
       }
     }
   }

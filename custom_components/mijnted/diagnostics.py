@@ -29,7 +29,8 @@ def _previous_summary(previous: PreviousSeason | None) -> dict[str, Any] | None:
         "start": previous.start.isoformat(),
         "end": previous.end.isoformat(),
         "days": len(previous.days),
-        "final_total": previous.final_total,
+        "final_total": previous.final_total(),
+        "meters": len(previous.meters),
     }
 
 

@@ -28,8 +28,11 @@ from homeassistant.util.hass_dict import HassKey
 
 from .const import DOMAIN, UNIT_UNITS
 from .models import Meter, daily_changes, meter_name
+from .seasons import shift_one_year
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from homeassistant.core import HomeAssistant
 
     from .seasons import PreviousSeason
@@ -49,6 +52,11 @@ _IMPORTED: HassKey[dict[str, dict[date, tuple[float, float]]]] = HassKey(
 def statistic_id(device_number: str) -> str:
     """External statistic id of a meter."""
     return f"{DOMAIN}:meter_{device_number.lower()}"
+
+
+def meter_previous_season_statistic_id(device_number: str) -> str:
+    """External statistic id of a meter's previous season, shifted one year."""
+    return f"{statistic_id(device_number)}_previous_season"
 
 
 def _unit_statistic_id(name: str, unit_id: int, *, only_unit: bool) -> str:
@@ -134,30 +142,58 @@ async def _async_import_days(
     async_add_external_statistics(hass, metadata, rows)
 
 
+def _dutch(hass: HomeAssistant) -> bool:
+    return hass.config.language.lower().startswith("nl")
+
+
+def _meter_label(
+    hass: HomeAssistant, device_number: str, meter: Meter | None, entry_id: str | None
+) -> str:
+    """Name of a meter's device in the config entry `entry_id`.
+
+    The name the user gave the device, otherwise the room name from the portal plus
+    the device number.
+    """
+    device = (
+        dr.async_get(hass).async_get_device_by_identifier(
+            (DOMAIN, device_number), entry_id
+        )
+        if entry_id
+        else None
+    )
+    return (device.name_by_user if device else None) or meter_name(
+        device_number, meter.room_code if meter else None, hass.config.language
+    )
+
+
 async def async_import_meter_statistics(
     hass: HomeAssistant, meters: list[Meter], entry_id: str | None = None
 ) -> None:
-    """Import the per-day values of the given meters.
-
-    A statistic is named after its device in the config entry `entry_id`: the
-    name the user gave it, otherwise the room name from the portal plus the device
-    number.
-    """
-    language = hass.config.language
-    devices = dr.async_get(hass)
+    """Import the per-day values of the given meters, named after their devices."""
     for meter in meters:
-        device = (
-            devices.async_get_device_by_identifier(
-                (DOMAIN, meter.device_number), entry_id
-            )
-            if entry_id
-            else None
-        )
-        name = (device.name_by_user if device else None) or meter_name(
-            meter.device_number, meter.room_code, language
-        )
         await _async_import_days(
-            hass, statistic_id(meter.device_number), name, meter.days
+            hass,
+            statistic_id(meter.device_number),
+            _meter_label(hass, meter.device_number, meter, entry_id),
+            meter.days,
+        )
+
+
+async def async_import_meter_previous_seasons(
+    hass: HomeAssistant,
+    previous: PreviousSeason,
+    meters: Mapping[str, Meter],
+    entry_id: str | None = None,
+) -> None:
+    """Import each meter's previous season, moved forward one year like the total."""
+    suffix = "vorig seizoen" if _dutch(hass) else "previous season"
+    for device_number, days in previous.meters.items():
+        label = _meter_label(hass, device_number, meters.get(device_number), entry_id)
+        await _async_import_days(
+            hass,
+            meter_previous_season_statistic_id(device_number),
+            f"{label} {suffix}",
+            shift_one_year(days),
         )
 
 
@@ -170,11 +206,7 @@ async def async_import_previous_season(
     new season starts, the season that just ended is imported over its own dates
     while the rows of the season before stay in the past.
     """
-    name = (
-        "Vorig seizoen totaal"
-        if hass.config.language.lower().startswith("nl")
-        else "Previous season total"
-    )
+    name = "Vorig seizoen totaal" if _dutch(hass) else "Previous season total"
     await _async_import_days(hass, stat_id, name, previous.shifted())
 
 

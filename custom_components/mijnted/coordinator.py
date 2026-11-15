@@ -56,6 +56,17 @@ def season_year(periods: list[BillingPeriod], today: date) -> int:
     return today.year + 1 if today.month >= 6 else today.year
 
 
+def portal_date(text: str | None) -> date | None:
+    """Parse a portal date such as "31-05-2023 00:00:00"; None when empty or odd."""
+    if not text:
+        return None
+    try:
+        day, month, year = text.split()[0].split("-")
+        return date(int(year), int(month), int(day))
+    except ValueError:
+        return None
+
+
 def _days_between(first: date, last: date) -> list[date]:
     """Every day from `first` up to and including `last`, if any."""
     return [first + timedelta(days=offset) for offset in range((last - first).days + 1)]
@@ -142,7 +153,7 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
                 household_statistic_id(unit_id, only_unit=len(data.units) == 1),
                 totals,
             )
-        await self.seasons.async_update(data.units, data.totals)
+        await self.seasons.async_update(data)
         return data
 
     async def _async_fetch(self) -> MijntedData:
@@ -197,12 +208,17 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
                         unit_of_measure=status.unit_of_measure,
                         model=model,
                         last_readout=readout,
+                        deactivation_date=portal_date(status.deactivation_date),
                     )
 
             data.totals[unit_id] = await self._async_fill_days(
                 unit.billing_unit_id, unit_id, meters, today
             )
             data.meters.update(meters)
+            readouts = [meter.last_readout for meter in meters.values()]
+            data.units[unit_id].last_readout = max(
+                (day for day in readouts if day), default=None
+            )
         return data
 
     async def _async_fill_days(

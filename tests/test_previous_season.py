@@ -19,7 +19,7 @@ from custom_components.mijnted.const import DOMAIN
 from custom_components.mijnted.seasons import PreviousSeason
 from custom_components.mijnted.statistics import async_import_previous_season
 
-from .helpers import at, refresh, setup_entry
+from .helpers import at, refresh, setup_entry, state
 
 if TYPE_CHECKING:
     from freezegun.api import FrozenDateTimeFactory
@@ -184,6 +184,70 @@ async def test_sensors_after_backfill(
     await hass.async_block_till_done()
     to_date = unit_state(hass, "previous_season_to_date")
     assert float(to_date.state) == expected[date(2025, 11, 16)]
+    meter = state(hass, portal.devices[0], "previous_season_to_date")
+    assert float(meter.state) == expected[date(2025, 11, 16)]
+
+
+@pytest.mark.usefixtures("mock_client")
+async def test_previous_season_per_meter(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    portal: FakePortal,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Test each meter gets its own shifted statistic and to-date sensor."""
+    at(freezer, "2026-11-15 10:00:00")
+    first, second = portal.devices[:2]
+    for device, final in ((first, 300), (second, 189)):
+        for day, value in ramp(date(2025, 6, 2), date(2026, 6, 1), final).items():
+            portal.set_day(day, value, device)
+        for day, value in ramp(date(2026, 6, 2), date(2026, 11, 13), 11).items():
+            portal.set_day(day, value, device)
+    portal.last_sync = date(2026, 11, 13)
+    await setup_entry(hass, config_entry)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    expected = ramp(date(2025, 6, 2), date(2026, 6, 1), 189)
+    sensor = state(hass, second, "previous_season_to_date")
+    assert float(sensor.state) == expected[date(2025, 11, 15)]
+    assert sensor.attributes["statistic_id"] == (
+        f"mijnted:meter_{second}_previous_season"
+    )
+    rows = await stat_rows(hass, f"mijnted:meter_{second}_previous_season")
+    assert rows[date(2026, 11, 15)]["state"] == expected[date(2025, 11, 15)]
+    assert rows[date(2027, 6, 1)]["state"] == 189
+    assert float(unit_state(hass, "previous_season_total").state) == 300 + 189
+    # A meter without values last season has none to compare with.
+    assert state(hass, portal.devices[2], "previous_season_to_date").state == (
+        "unknown"
+    )
+
+
+@pytest.mark.usefixtures("mock_client")
+async def test_season_stored_without_meters_is_fetched_again(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    portal: FakePortal,
+    config_entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
+) -> None:
+    """Test a season stored by 0.2.0 is fetched once more for the meter values."""
+    previous = season(date(2025, 6, 2), date(2026, 6, 1), 489).as_dict()
+    del previous["meters"]
+    hass_storage[f"{DOMAIN}.{config_entry.entry_id}.seasons"] = {
+        "version": 1,
+        "key": f"{DOMAIN}.{config_entry.entry_id}.seasons",
+        "data": {
+            "units": {"100001": {"current_start": "2026-06-02", "previous": previous}}
+        },
+    }
+    await setup_with_history(hass, freezer, portal, config_entry)
+
+    assert portal.backfill_days
+    meter = state(hass, portal.devices[0], "previous_season_to_date")
+    assert meter.state != "unknown"
+    stored = hass_storage[f"{DOMAIN}.{config_entry.entry_id}.seasons"]["data"]
+    assert portal.devices[0] in stored["units"]["100001"]["previous"]["meters"]
 
 
 @pytest.mark.usefixtures("mock_client")

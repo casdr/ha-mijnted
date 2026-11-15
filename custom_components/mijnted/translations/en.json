@@ -55,15 +55,38 @@
       "init": {
         "title": "mijnTED options",
         "data": {
-          "update_interval": "Update interval"
+          "update_interval": "Update interval",
+          "price_per_unit": "Price per unit"
         },
         "data_description": {
-          "update_interval": "Hours between updates. mijnTED is updated about once a day."
+          "update_interval": "Hours between updates. mijnTED is updated about once a day.",
+          "price_per_unit": "Consumption cost per unit from your annual heating statement, for the cost estimate. Leave at 0 to leave the estimate out."
         }
       }
     }
   },
   "entity": {
+    "binary_sensor": {
+      "data_outdated": {
+        "name": "Data outdated",
+        "state_attributes": {
+          "last_readout_date": {
+            "name": "Last readout date"
+          }
+        }
+      },
+      "not_reporting": {
+        "name": "Not reporting",
+        "state_attributes": {
+          "last_value_date": {
+            "name": "Last value date"
+          },
+          "deactivation_date": {
+            "name": "Deactivation date"
+          }
+        }
+      }
+    },
     "sensor": {
       "cumulative": {
         "name": "Season total",
@@ -98,6 +121,9 @@
           },
           "season_end": {
             "name": "Season end"
+          },
+          "statistic_id": {
+            "name": "Statistic ID"
           }
         }
       },
@@ -109,6 +135,17 @@
           },
           "season_end": {
             "name": "Season end"
+          }
+        }
+      },
+      "season_cost": {
+        "name": "Estimated cost this season",
+        "state_attributes": {
+          "price_per_unit": {
+            "name": "Price per unit"
+          },
+          "season_total": {
+            "name": "Season total"
           }
         }
       }

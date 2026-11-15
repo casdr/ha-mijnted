@@ -16,7 +16,11 @@ from custom_components.mijnted.api import (
     MijntedUnexpectedPageError,
     SignInStep,
 )
-from custom_components.mijnted.const import CONF_UPDATE_INTERVAL, DOMAIN
+from custom_components.mijnted.const import (
+    CONF_PRICE_PER_UNIT,
+    CONF_UPDATE_INTERVAL,
+    DOMAIN,
+)
 
 from .fake_portal import ACCOUNT_ID, EMAIL, PASSWORD, FakePortal
 
@@ -172,7 +176,7 @@ async def test_reconfigure(hass: HomeAssistant, config_entry: MockConfigEntry) -
 async def test_options_update_interval(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
-    """Test options update interval."""
+    """Test the update interval; the price per unit stays 0 when left out."""
     config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(config_entry.entry_id)
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
@@ -182,7 +186,7 @@ async def test_options_update_interval(
         result["flow_id"], {CONF_UPDATE_INTERVAL: 3}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert config_entry.options == {CONF_UPDATE_INTERVAL: 3}
+    assert config_entry.options == {CONF_UPDATE_INTERVAL: 3, CONF_PRICE_PER_UNIT: 0}
 
 
 async def test_options_reject_below_one_hour(

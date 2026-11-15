@@ -51,45 +51,71 @@ def one_year_earlier(day: date) -> date:
         return date(day.year - 1, 2, 28)
 
 
+def shift_one_year(days: Mapping[date, float]) -> dict[date, float]:
+    """Return the values moved forward one calendar year.
+
+    29 February lands on 28 February and replaces that day's value, as it is the
+    later of the two.
+    """
+    return {one_year_later(day): days[day] for day in sorted(days)}
+
+
+def _days_to_json(days: Mapping[date, float]) -> dict[str, float]:
+    return {day.isoformat(): value for day, value in sorted(days.items())}
+
+
+def _days_from_json(data: Mapping[str, float]) -> dict[date, float]:
+    return {date.fromisoformat(day): float(value) for day, value in data.items()}
+
+
 @dataclass(slots=True)
 class PreviousSeason:
-    """The household's cumulative total per day during the previous season."""
+    """The cumulative values per day during the previous season.
+
+    `days` holds the household total, `meters` the value of each meter by device
+    number. Seasons stored by version 0.2.0 have no `meters`.
+    """
 
     start: date
     end: date
     days: dict[date, float]
+    meters: dict[str, dict[date, float]] = field(default_factory=dict)
 
-    @property
-    def final_total(self) -> float:
-        """Total at the end of the season."""
-        return self.days[max(self.days)]
+    def _values(self, device: str | None) -> dict[date, float] | None:
+        return self.days if device is None else self.meters.get(device)
 
-    def to_date(self, day: date) -> float:
-        """Total of this season up to and including `day` (a date in this season).
+    def final_total(self, device: str | None = None) -> float | None:
+        """Value at the end of the season: the household's, or one meter's."""
+        values = self._values(device)
+        return values[max(values)] if values else None
 
-        Before the season started it is 0, after it ended the final total. A day
-        without a value takes the newest earlier one.
+    def to_date(self, day: date, device: str | None = None) -> float | None:
+        """Value up to and including `day` (a date in this season).
+
+        The household's by default, or one meter's; None for a meter that was not
+        there. Before the season started it is 0, after it ended the final value. A
+        day without a value takes the newest earlier one.
         """
+        values = self._values(device)
+        if values is None:
+            return None
         if day < self.start:
             return 0.0
-        earlier = [d for d in self.days if d <= day]
-        return self.days[max(earlier)] if earlier else 0.0
+        earlier = [d for d in values if d <= day]
+        return values[max(earlier)] if earlier else 0.0
 
     def shifted(self) -> dict[date, float]:
-        """Return the totals moved forward one calendar year.
-
-        29 February lands on 28 February and replaces that day's value, as it is the
-        later of the two.
-        """
-        return {one_year_later(day): self.days[day] for day in sorted(self.days)}
+        """Return the household totals moved forward one calendar year."""
+        return shift_one_year(self.days)
 
     def as_dict(self) -> dict[str, Any]:
         """Serialise for storage."""
         return {
             "start": self.start.isoformat(),
             "end": self.end.isoformat(),
-            "days": {
-                day.isoformat(): value for day, value in sorted(self.days.items())
+            "days": _days_to_json(self.days),
+            "meters": {
+                device: _days_to_json(days) for device, days in self.meters.items()
             },
         }
 
@@ -99,7 +125,11 @@ class PreviousSeason:
         return cls(
             start=date.fromisoformat(data["start"]),
             end=date.fromisoformat(data["end"]),
-            days={date.fromisoformat(day): float(v) for day, v in data["days"].items()},
+            days=_days_from_json(data["days"]),
+            meters={
+                device: _days_from_json(days)
+                for device, days in data.get("meters", {}).items()
+            },
         )
 
 

@@ -12,9 +12,14 @@ CONF_UPDATE_INTERVAL: Final = "update_interval"
 DEFAULT_UPDATE_INTERVAL_HOURS: Final = 6
 MIN_UPDATE_INTERVAL_HOURS: Final = 1
 MAX_UPDATE_INTERVAL_HOURS: Final = 24
+# Price per unit for the cost estimate; 0 (the default) leaves the estimate out.
+CONF_PRICE_PER_UNIT: Final = "price_per_unit"
 
 # Days of history fetched and imported as statistics on every update.
 HISTORY_DAYS: Final = 30
+# The portal is a day or two behind; data older than this counts as outdated, which
+# leaves room for a weekend.
+STALE_AFTER: Final = timedelta(days=4)
 # Exponential back-off on transient errors, capped at this interval.
 MAX_BACKOFF: Final = timedelta(hours=24)
 

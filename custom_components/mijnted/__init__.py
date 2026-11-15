@@ -20,7 +20,7 @@ from .season_tracker import STORE_VERSION, store_key
 if TYPE_CHECKING:
     from .models import ResidentialUnitInfo
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 def create_client(hass: HomeAssistant, email: str, password: str) -> MijntedClient:

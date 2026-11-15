@@ -34,6 +34,13 @@ class Meter:
     model: str | None
     last_readout: date | None
     days: dict[date, float] = field(default_factory=dict)
+    # Set when the portal lists the meter as deactivated.
+    deactivation_date: date | None = None
+
+    @property
+    def reporting(self) -> bool:
+        """Whether the meter is active and has a value on the last readout date."""
+        return self.deactivation_date is None and self.readout_value is not None
 
     @property
     def readout_value(self) -> float | None:
@@ -66,6 +73,8 @@ class ResidentialUnitInfo:
     billing_unit_id: int
     apartment_no: str | None
     model: str | None
+    # Newest readout date of the unit's meters.
+    last_readout: date | None = None
 
 
 @dataclass(slots=True)
