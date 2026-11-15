@@ -1,0 +1,39 @@
+---
+# Weekly updates for the Python tooling (uv.lock) and the GitHub Actions. Minor
+# and patch updates come grouped in one pull request per ecosystem; major updates
+# get a pull request each.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "⬆️"
+    groups:
+      python:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "⬆️"
+    groups:
+      github-actions:
+        update-types:
+          - "minor"
+          - "patch"
