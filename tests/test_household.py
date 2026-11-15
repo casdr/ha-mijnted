@@ -155,3 +155,31 @@ async def test_statistic_names(
         f"mijnted:meter_{meters[0]}": f"Living room {meters[0]}",
         f"mijnted:meter_{meters[1]}": "Office",
     }
+
+
+async def test_staggered_reset_adds_only_new_units(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    portal: FakePortal,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Test meters resetting on different days add only their new units."""
+    at(freezer, "2026-06-15 10:00:00")
+    first, second = portal.devices[:2]
+    values = {
+        first: [489, 489, 1, 2, 3],
+        second: [100, 100, 100, 0, 1],
+    }
+    for device, series in values.items():
+        for offset, value in enumerate(series):
+            portal.set_day(date(2026, 6, 9) + timedelta(days=offset), value, device)
+    portal.last_sync = date(2026, 6, 13)
+    await setup_entry(hass, config_entry)
+
+    total = await stat_rows(hass, TOTAL_ID)
+    meters = [await stat_rows(hass, f"mijnted:meter_{m}") for m in (first, second)]
+    start, end = date(2026, 6, 10), date(2026, 6, 13)
+    assert total[end]["sum"] - total[start]["sum"] == sum(
+        rows[end]["sum"] - rows[start]["sum"] for rows in meters
+    )
+    assert total[end]["sum"] - total[start]["sum"] == 4

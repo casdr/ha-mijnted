@@ -22,6 +22,7 @@ HISTORY_DAYS: Final = 30
 STALE_AFTER: Final = timedelta(days=4)
 # Exponential back-off on transient errors, capped at this interval.
 MAX_BACKOFF: Final = timedelta(hours=24)
+MAX_BACKOFF_STEPS: Final = 8
 
 HEATING_DELIVERY_TYPE: Final = 1
 UNIT_UNITS: Final = "units"

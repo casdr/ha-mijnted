@@ -28,6 +28,7 @@ from .const import (
     ISSUE_EXPORT_DISABLED,
     ISSUE_UNEXPECTED_PAGE,
     MAX_BACKOFF,
+    MAX_BACKOFF_STEPS,
 )
 from .models import Meter, MijntedData, ResidentialUnitInfo
 from .season_tracker import SeasonTracker
@@ -117,10 +118,7 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
                 is_fixable=False,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key=ISSUE_UNEXPECTED_PAGE,
-                translation_placeholders={
-                    "step": err.step,
-                    "title": self.config_entry.title,
-                },
+                translation_placeholders={"step": err.step},
             )
             raise ConfigEntryError(
                 translation_domain=DOMAIN,
@@ -129,7 +127,9 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
             ) from err
         except MijntedConnectionError as err:
             _LOGGER.debug("Update: cannot connect (%s)", err)
-            self._failures += 1
+            # Capped: the interval reaches MAX_BACKOFF well before this, and an
+            # ever-growing count would overflow the multiplication.
+            self._failures = min(self._failures + 1, MAX_BACKOFF_STEPS)
             self.update_interval = min(
                 self._base_interval * 2**self._failures, MAX_BACKOFF
             )
@@ -152,6 +152,11 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
                 self.hass,
                 household_statistic_id(unit_id, only_unit=len(data.units) == 1),
                 totals,
+                [
+                    meter.days
+                    for meter in data.meters.values()
+                    if meter.residential_unit_id == unit_id
+                ],
             )
         await self.seasons.async_update(data)
         return data
@@ -259,14 +264,28 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
     async def _async_values_by_day(
         self, billing_unit_id: int, unit_id: int, wanted: list[date], last_readout: date
     ) -> dict[date, dict[str, float]]:
-        """Return the export of each wanted day, fetching only days not cached."""
+        """Return the export of each wanted day, fetching only days not cached.
+
+        A day before the last readout is final and kept, but only once it is
+        complete. It is incomplete when a meter with a value on an earlier day has
+        none on it; such a day is fetched again next time. Days before a meter's
+        first value, such as before it was installed, do not wait for it.
+        """
         cache = self._final_days.setdefault(unit_id, {})
         for day in [day for day in cache if day < wanted[0]]:
             del cache[day]
         fetched = await self.client.async_get_days(
             billing_unit_id, unit_id, [day for day in wanted if day not in cache]
         )
+        # Keep a day only when it has every meter that had a value before it.
+        seen: set[str] = set()
+        complete: set[date] = set()
+        for day in sorted(cache.keys() | fetched.keys()):
+            values = fetched.get(day, cache.get(day, {}))
+            if seen <= values.keys():
+                complete.add(day)
+            seen |= values.keys()
         for day, values in fetched.items():
-            if day < last_readout:
+            if day < last_readout and day in complete:
                 cache[day] = values
         return {**cache, **fetched}

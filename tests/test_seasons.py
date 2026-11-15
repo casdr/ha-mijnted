@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import pytest
+
 from custom_components.mijnted.seasons import (
     PreviousSeason,
     SeasonHistory,
@@ -63,6 +65,25 @@ async def test_boundaries_from_a_reset_in_june() -> None:
     assert set(portal.asked) == set(PREVIOUS) | set(CURRENT) | {date(2025, 6, 1)}
 
 
+@pytest.mark.parametrize("extra_days", range(7))
+async def test_reset_over_two_days(extra_days: int) -> None:
+    """Test meters resetting a day apart: the season starts at the low point.
+
+    The day in between, with some meters reset, belongs to neither season. The
+    weekly samples land on different days depending on the latest day.
+    """
+    previous = ramp(date(2025, 6, 2), date(2026, 5, 31), 489)
+    latest = LATEST + timedelta(days=extra_days)
+    current = ramp(date(2026, 6, 2), latest, 22)
+    portal = Portal(SEASON_BEFORE | previous | {date(2026, 6, 1): 200} | current)
+    history = await async_find_seasons(portal.fetch, latest)
+
+    assert history.current_start == date(2026, 6, 2)
+    assert history.previous is not None
+    assert history.previous.end == date(2026, 5, 31)
+    assert history.previous.final_total() == 489
+
+
 async def test_replaced_meter_is_not_a_new_season() -> None:
     """Test a small drop, such as a replaced meter, does not end the season."""
     previous = dict(PREVIOUS)
@@ -86,7 +107,9 @@ async def test_new_account_has_no_previous_season() -> None:
 async def test_no_data() -> None:
     """Test a unit without any values."""
     history = await async_find_seasons(Portal({}).fetch, LATEST)
-    assert history == SeasonHistory(current_start=None, previous=None)
+    assert history == SeasonHistory(
+        current_start=None, previous=None, checked_until=LATEST
+    )
 
 
 def test_one_year_shift_maps_29_february() -> None:

@@ -298,3 +298,28 @@ async def test_new_season_becomes_the_previous_one(
     )
     sums = [rows[day]["sum"] for day in sorted(rows)]
     assert sums == sorted(sums)
+
+
+@pytest.mark.usefixtures("mock_client")
+async def test_dips_after_the_start_do_not_fetch_again(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    portal: FakePortal,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Test a reset over two days, and a dip early in the season, fetch only once."""
+    at(freezer, "2026-06-20 10:00:00")
+    portal.fill_ramp(date(2024, 6, 2), date(2025, 6, 1), 400)
+    portal.fill_ramp(date(2025, 6, 2), date(2026, 5, 31), 489)
+    portal.set_day(date(2026, 6, 1), 200)
+    portal.fill_ramp(date(2026, 6, 2), date(2026, 6, 19), 6)
+    portal.set_day(date(2026, 6, 12), 1)  # 2 -> 1 -> 2: a dip to half
+    portal.last_sync = date(2026, 6, 19)
+    await setup_entry(hass, config_entry)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert float(unit_state(hass, "previous_season_total").state) == 489
+
+    portal.backfill_days.clear()
+    await refresh(hass, config_entry)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert portal.backfill_days == []

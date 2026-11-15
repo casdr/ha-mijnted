@@ -20,13 +20,14 @@ from custom_components.mijnted.api import (
 )
 from custom_components.mijnted.const import DOMAIN
 
-from .fake_portal import EMAIL, FakePortal
 from .helpers import at, setup_entry
 
 if TYPE_CHECKING:
     from freezegun.api import FrozenDateTimeFactory
     from homeassistant.core import HomeAssistant
     from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from .fake_portal import FakePortal
 
 pytestmark = pytest.mark.usefixtures("amsterdam")
 
@@ -77,7 +78,8 @@ async def test_unexpected_page_at_setup(
         DOMAIN, f"unexpected_sign_in_page_{config_entry.entry_id}"
     )
     assert issue is not None
-    assert issue.translation_placeholders == {"step": "confirm", "title": EMAIL}
+    # The entry title is the e-mail address; it stays out of the issue.
+    assert issue.translation_placeholders == {"step": "confirm"}
 
 
 @pytest.mark.usefixtures("mock_client")

@@ -27,11 +27,11 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.hass_dict import HassKey
 
 from .const import DOMAIN, UNIT_UNITS
-from .models import Meter, daily_changes, meter_name
+from .models import Meter, daily_changes, household_changes, meter_name
 from .seasons import shift_one_year
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
     from homeassistant.core import HomeAssistant
 
@@ -97,32 +97,51 @@ def _last_row_before(
     return day, last.get("state"), last.get("sum") or 0.0
 
 
-async def _async_import_days(
-    hass: HomeAssistant, stat_id: str, name: str, days: dict[date, float]
-) -> None:
-    """Import one row per day, with the sum continuing from the row before."""
-    if not days:
-        return
-    first_day = min(days)
-    imported = hass.data.setdefault(_IMPORTED, {}).setdefault(stat_id, {})
-    # The newest row before the first day: stored by an earlier run, or imported in
-    # this run and perhaps still in the recorder's queue. The later one counts.
+async def _async_base(
+    hass: HomeAssistant, stat_id: str, first_day: date
+) -> tuple[float | None, float]:
+    """State and sum of the newest row before `first_day`, or (None, 0).
+
+    That row was stored by an earlier run, or imported in this run and perhaps still
+    in the recorder's queue. The later of the two counts.
+    """
+    imported = hass.data.get(_IMPORTED, {}).get(stat_id, {})
     stored = await get_instance(hass).async_add_executor_job(
         _last_row_before, hass, stat_id, dt_util.start_of_local_day(first_day)
     )
     earlier = [day for day in imported if day < first_day]
-    previous_state: float | None = None
-    running_sum = 0.0
-    if stored is not None:
-        _, previous_state, running_sum = stored
     if earlier and (stored is None or max(earlier) >= stored[0]):
-        previous_state, running_sum = imported[max(earlier)]
+        return imported[max(earlier)]
+    if stored is not None:
+        return stored[1], stored[2]
+    return None, 0.0
 
+
+async def _async_import_days(
+    hass: HomeAssistant,
+    stat_id: str,
+    name: str,
+    days: Mapping[date, float],
+    changes: Mapping[date, float] | None = None,
+) -> None:
+    """Import one row per day, with the sum continuing from the row before.
+
+    `changes` replaces the change worked out from `days`, except on the first day,
+    which continues from the row before.
+    """
+    if not days:
+        return
+    first_day = min(days)
+    imported = hass.data.setdefault(_IMPORTED, {}).setdefault(stat_id, {})
+    previous_state, running_sum = await _async_base(hass, stat_id, first_day)
     for day in [day for day in imported if day < first_day - LOOKBACK]:
         del imported[day]
     rows: list[StatisticData] = []
     for day, value, change in daily_changes(days, previous_state):
-        running_sum += change
+        if changes is not None and day != first_day and day in changes:
+            running_sum += changes[day]
+        else:
+            running_sum += change
         imported[day] = (value, running_sum)
         rows.append(
             StatisticData(
@@ -211,7 +230,16 @@ async def async_import_previous_season(
 
 
 async def async_import_household(
-    hass: HomeAssistant, stat_id: str, days: dict[date, float]
+    hass: HomeAssistant,
+    stat_id: str,
+    days: Mapping[date, float],
+    meters: Iterable[Mapping[date, float]],
 ) -> None:
-    """Import the household total (all meters added up) per day."""
-    await _async_import_days(hass, stat_id, "mijnTED total", days)
+    """Import the household total (all meters added up) per day.
+
+    The change of each day is the sum of the meters' changes, given as their values
+    per day.
+    """
+    await _async_import_days(
+        hass, stat_id, "mijnTED total", days, household_changes(meters, days)
+    )

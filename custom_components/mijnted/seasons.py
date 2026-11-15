@@ -24,6 +24,12 @@ SCAN_STEP = 7
 MAX_SCAN_DAYS = 800
 # Missing days tolerated inside the previous season before it is taken to start.
 MAX_GAP_DAYS = 7
+# Days a reset may take: meters do not always reset on the same day.
+MAX_RESET_DAYS = 3
+# A drop from below this total is not taken as a new season after the start was
+# found. Early in a season a total of 2 falling to 1 halves, and would otherwise
+# start a new backfill.
+MIN_SEASON_TOTAL = 10
 
 
 def is_reset(previous: float, value: float) -> bool:
@@ -33,6 +39,11 @@ def is_reset(previous: float, value: float) -> bool:
     a new season brings it back to about zero.
     """
     return value < previous and value <= previous / 2
+
+
+def is_new_season(previous: float, value: float) -> bool:
+    """Tell whether a drop ends a season that counted at least `MIN_SEASON_TOTAL`."""
+    return previous >= MIN_SEASON_TOTAL and is_reset(previous, value)
 
 
 def one_year_later(day: date) -> date:
@@ -137,32 +148,41 @@ class PreviousSeason:
 class SeasonHistory:
     """Where the current season started, and the season before it if known.
 
-    `current_days` holds the current season's totals as fetched; they go into the
-    recorder once and are not stored with the rest.
+    `checked_until` is the newest day the search looked at; a drop up to then is
+    already accounted for. `current_days` holds the current season's totals as
+    fetched; they go into the recorder once and are not stored with the rest.
     """
 
     current_start: date | None
     previous: PreviousSeason | None
     current_days: dict[date, float] = field(default_factory=dict, compare=False)
+    checked_until: date | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Serialise for storage."""
         return {
-            "current_start": self.current_start.isoformat()
-            if self.current_start
-            else None,
+            "current_start": _iso(self.current_start),
+            "checked_until": _iso(self.checked_until),
             "previous": self.previous.as_dict() if self.previous else None,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SeasonHistory:
         """Restore from storage."""
-        start = data.get("current_start")
         previous = data.get("previous")
         return cls(
-            current_start=date.fromisoformat(start) if start else None,
+            current_start=_date(data.get("current_start")),
             previous=PreviousSeason.from_dict(previous) if previous else None,
+            checked_until=_date(data.get("checked_until")),
         )
+
+
+def _iso(day: date | None) -> str | None:
+    return day.isoformat() if day else None
+
+
+def _date(text: str | None) -> date | None:
+    return date.fromisoformat(text) if text else None
 
 
 def reset_after(totals: Mapping[date, float], after: date | None) -> date | None:
@@ -170,7 +190,9 @@ def reset_after(totals: Mapping[date, float], after: date | None) -> date | None
     found = None
     days = sorted(totals)
     for earlier, day in itertools.pairwise(days):
-        if (after is None or day > after) and is_reset(totals[earlier], totals[day]):
+        if (after is None or day > after) and is_new_season(
+            totals[earlier], totals[day]
+        ):
             found = day
     return found
 
@@ -218,11 +240,38 @@ async def _find_current_start(
     return later
 
 
+async def _reset_span(totals: _Totals, day: date, latest: date) -> tuple[date, date]:
+    """Return the first and last day of the drop that `day` is part of.
+
+    When the meters reset on different days, the total falls over a few days in a
+    row. The season before ends the day before the first drop; the new season starts
+    at the last, its lowest point.
+    """
+    first = day
+    for _ in range(MAX_RESET_DAYS):
+        # Is the day before `first` itself already lower than the day before it?
+        before = await totals.get(first - timedelta(days=2))
+        value = await totals.get(first - timedelta(days=1))
+        if before is None or value is None or before <= value:
+            break
+        first -= timedelta(days=1)
+    last = day
+    for _ in range(MAX_RESET_DAYS):
+        if last >= latest:
+            break
+        after = await totals.get(last + timedelta(days=1))
+        value = await totals.get(last)
+        if after is None or value is None or after >= value:
+            break
+        last += timedelta(days=1)
+    return first, last
+
+
 async def _fetch_previous(
-    totals: _Totals, current_start: date, earliest: date
+    totals: _Totals, first_drop: date, earliest: date
 ) -> PreviousSeason | None:
-    """Fetch the season before `current_start` day by day, back to its reset."""
-    end = current_start - timedelta(days=1)
+    """Fetch the season before the reset day by day, back to its own reset."""
+    end = first_drop - timedelta(days=1)
     days: dict[date, float] = {}
     day, newer_value, missing = end, None, 0
     while day >= earliest and missing <= MAX_GAP_DAYS:
@@ -250,10 +299,11 @@ async def async_find_seasons(
     """
     totals = _Totals(fetch)
     earliest = latest - timedelta(days=max_days)
-    current_start = await _find_current_start(totals, latest, earliest)
-    if current_start is None:
-        return SeasonHistory(current_start=None, previous=None)
-    previous = await _fetch_previous(totals, current_start, earliest)
+    found = await _find_current_start(totals, latest, earliest)
+    if found is None:
+        return SeasonHistory(current_start=None, previous=None, checked_until=latest)
+    first_drop, current_start = await _reset_span(totals, found, latest)
+    previous = await _fetch_previous(totals, first_drop, earliest)
     current_days: dict[date, float] = {}
     day = current_start
     while day <= latest:
@@ -261,5 +311,8 @@ async def async_find_seasons(
             current_days[day] = value
         day += timedelta(days=1)
     return SeasonHistory(
-        current_start=current_start, previous=previous, current_days=current_days
+        current_start=current_start,
+        previous=previous,
+        current_days=current_days,
+        checked_until=latest,
     )

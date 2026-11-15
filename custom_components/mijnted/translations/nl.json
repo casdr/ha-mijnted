@@ -165,7 +165,7 @@
   "issues": {
     "unexpected_sign_in_page": {
       "title": "Inloggen bij mijnTED vraagt aandacht",
-      "description": "Het inloggen bij mijnTED voor {title} stopte op een niet-ondersteunde pagina (stap: {step}). Dat gebeurt bij tweestapsverificatie, een captcha, nieuwe gebruiksvoorwaarden of een gewijzigde inlogpagina. Log in op mijnted.nl in een browser, rond eventuele extra stappen af en laad de integratie daarna opnieuw. Tot die tijd staan updates stil."
+      "description": "Het inloggen bij mijnTED stopte op een niet-ondersteunde pagina (stap: {step}). Dat gebeurt bij tweestapsverificatie, een captcha, nieuwe gebruiksvoorwaarden of een gewijzigde inlogpagina. Log in op mijnted.nl in een browser, rond eventuele extra stappen af en laad de integratie daarna opnieuw. Tot die tijd staan updates stil."
     },
     "export_disabled": {
       "title": "mijnTED-meterexport staat uit",

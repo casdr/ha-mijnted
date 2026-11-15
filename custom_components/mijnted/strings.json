@@ -165,7 +165,7 @@
   "issues": {
     "unexpected_sign_in_page": {
       "title": "mijnTED sign-in needs attention",
-      "description": "Signing in to mijnTED for {title} stopped at an unsupported page (step: {step}). This happens with multi-factor authentication, a captcha, new terms of use or a changed sign-in page. Sign in on mijnted.nl in a browser and complete any extra step, then reload the integration. Updates are paused until then."
+      "description": "Signing in to mijnTED stopped at an unsupported page (step: {step}). This happens with multi-factor authentication, a captcha, new terms of use or a changed sign-in page. Sign in on mijnted.nl in a browser and complete any extra step, then reload the integration. Updates are paused until then."
     },
     "export_disabled": {
       "title": "mijnTED meter export is off",

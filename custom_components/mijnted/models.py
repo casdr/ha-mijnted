@@ -6,8 +6,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .const import ROOMS_EN, ROOMS_NL
+from .seasons import is_reset
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
     from datetime import date
 
 
@@ -51,18 +53,16 @@ class Meter:
 
     @property
     def readout_increase(self) -> float | None:
-        """Units added on the last readout date.
-
-        After a season reset the value drops; the new value is then the increase.
-        """
+        """Units added on the last readout date, by the rules of `daily_changes`."""
         current = self.readout_value
         if current is None or self.last_readout is None:
             return None
         earlier = [day for day in self.days if day < self.last_readout]
         if not earlier:
             return None
-        previous = self.days[max(earlier)]
-        return current - previous if current >= previous else current
+        return daily_changes({self.last_readout: current}, self.days[max(earlier)])[0][
+            2
+        ]
 
 
 @dataclass(slots=True)
@@ -88,23 +88,46 @@ class MijntedData:
 
 
 def daily_changes(
-    days: dict[date, float], previous: float | None
+    days: Mapping[date, float], previous: float | None
 ) -> list[tuple[date, float, float]]:
     """Return (day, cumulative value, change) per day, oldest first.
 
-    The change is the difference with the day before. A drop means a new heating season:
-    the counter restarted at zero, so the new value is the change. The first day has
-    change 0 when `previous` is unknown.
+    The change is the rise above the highest value so far. A drop to about zero
+    (`is_reset`) is a new heating season: the counter restarted, so the new value is
+    the change. A smaller drop, such as a correction or a replaced meter, adds
+    nothing until the value is back above where it was. The first day has change 0
+    when `previous` is unknown.
     """
     result: list[tuple[date, float, float]] = []
+    high = previous
     for day in sorted(days):
         value = days[day]
-        if previous is None:
-            change = 0.0
-        elif value >= previous:
-            change = value - previous
+        if high is None:
+            change, high = 0.0, value
+        elif value >= high:
+            change, high = value - high, value
+        elif is_reset(high, value):
+            change, high = value, value
         else:
-            change = value
+            change = 0.0
         result.append((day, value, change))
-        previous = value
+    return result
+
+
+def household_changes(
+    meters: Iterable[Mapping[date, float]], days: Iterable[date]
+) -> dict[date, float]:
+    """Return the household's change per day as the sum of each meter's change.
+
+    Each meter's change is taken between consecutive household `days`, by the rules
+    of `daily_changes`. Meters that reset on different days then add only their new
+    units, where the difference of household totals would count the meters not yet
+    reset as new units too. The first day has change 0.
+    """
+    wanted = set(days)
+    result = dict.fromkeys(wanted, 0.0)
+    for values in meters:
+        kept = {day: value for day, value in values.items() if day in wanted}
+        for day, _, change in daily_changes(kept, None):
+            result[day] += change
     return result

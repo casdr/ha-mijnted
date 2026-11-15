@@ -134,11 +134,17 @@ the readout day.
   date. Days after it repeat the previous value in the portal and are skipped until
   their real value arrives. Weekend days usually arrive on Monday, each with its own
   value.
-- Values before the last readout are final. They are fetched once and kept in memory.
+- Values before the last readout are final. They are fetched once and kept in memory,
+  once every meter has a value for that day; a day that came back without one is
+  fetched again at the next update.
 - Each update re-imports the last 30 days. Rows for the same day are overwritten, so
   repeated imports do not add up.
-- When a counter drops (a new heating season), the new value counts as that day's
-  change instead of a negative one.
+- When a counter drops to about zero (a new heating season), the new value counts as
+  that day's change instead of a negative one. A smaller drop, such as a correction or
+  a replaced meter, adds nothing until the value is back where it was.
+- The household total's change is the sum of each meter's change, so meters that
+  reset a day apart do not count the others' units twice. A reset spread over a few
+  days is one reset: the previous season ends before the first drop.
 
 ## Errors and back-off
 

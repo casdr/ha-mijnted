@@ -234,8 +234,7 @@ class MijntedClient:
     async def async_sign_in(self) -> str:
         """Do a full sign-in and fetch an API token. Returns the account id."""
         async with self._token_lock:
-            refresh = await self._sign_in()
-            self._tokens = await self._redeem_refresh(refresh)
+            self._tokens = await self._sign_in_for_api_token()
             return self._tokens.account_id
 
     async def _async_access_token(self) -> str:
@@ -255,9 +254,20 @@ class MijntedClient:
                     self._tokens = None
                 else:
                     return self._tokens.access_token
-            refresh = await self._sign_in()
-            self._tokens = await self._redeem_refresh(refresh)
+            self._tokens = await self._sign_in_for_api_token()
             return self._tokens.access_token
+
+    async def _sign_in_for_api_token(self) -> Tokens:
+        """Sign in with the password, then redeem the fresh refresh token.
+
+        B2C accepted the password by then, so a refused token here is not a wrong
+        password but a changed flow: it is reported as an unexpected page.
+        """
+        refresh = await self._sign_in()
+        try:
+            return await self._redeem_refresh(refresh)
+        except MijntedAuthError as err:
+            raise MijntedUnexpectedPageError(SignInStep.REDEEM_REFRESH) from err
 
     async def _sign_in(self) -> str:
         """Run the B2C sign-in and return a refresh token (sign-in scope)."""
@@ -269,16 +279,20 @@ class MijntedClient:
         code = await self._confirm(page)
 
         _LOGGER.debug("Sign-in: redeeming authorization code")
-        body = await self._token_request(
-            {
-                "grant_type": "authorization_code",
-                "client_id": CLIENT_ID,
-                "code": code,
-                "redirect_uri": REDIRECT_URI,
-                "code_verifier": verifier,
-                "scope": SIGN_IN_SCOPE,
-            }
-        )
+        try:
+            body = await self._token_request(
+                {
+                    "grant_type": "authorization_code",
+                    "client_id": CLIENT_ID,
+                    "code": code,
+                    "redirect_uri": REDIRECT_URI,
+                    "code_verifier": verifier,
+                    "scope": SIGN_IN_SCOPE,
+                }
+            )
+        except MijntedAuthError as err:
+            # The password was accepted; a refused code means a changed flow.
+            raise MijntedUnexpectedPageError(SignInStep.REDEEM_CODE) from err
         refresh = body.get("refresh_token")
         if not isinstance(refresh, str) or not refresh:
             raise MijntedUnexpectedPageError(SignInStep.REDEEM_CODE)

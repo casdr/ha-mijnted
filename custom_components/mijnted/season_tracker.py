@@ -18,7 +18,7 @@ from homeassistant.helpers.storage import Store
 
 from .api import MijntedError
 from .const import DOMAIN
-from .seasons import SeasonHistory, async_find_seasons, is_reset, reset_after
+from .seasons import SeasonHistory, async_find_seasons, is_new_season, reset_after
 from .statistics import (
     async_import_household,
     async_import_meter_previous_seasons,
@@ -144,14 +144,15 @@ class SeasonTracker:
         if history.previous and not history.previous.meters:
             # Stored before the meters were kept: fetch once more to get them.
             return True
-        if reset_after(totals, history.current_start) is not None:
+        checked = [day for day in (history.current_start, history.checked_until) if day]
+        if reset_after(totals, max(checked, default=None)) is not None:
             return True
         last_seen = self._last_seen.get(unit_id)
         if last_seen is None:
             return False
         seen_day, seen_total = last_seen
         newer = [day for day in totals if day > seen_day]
-        return bool(newer) and is_reset(seen_total, totals[min(newer)])
+        return bool(newer) and is_new_season(seen_total, totals[min(newer)])
 
     def _start_backfill(
         self,
@@ -207,13 +208,15 @@ class SeasonTracker:
         self._imported.discard(unit_id)
         if history.previous:
             await self._async_import(unit_id, units)
+        current = _complete_days(
+            history.current_days,
+            {day: set(values) for day, values in values_by_day.items()},
+        )
         await async_import_household(
             self._hass,
             household_statistic_id(unit_id, only_unit=len(units) == 1),
-            _complete_days(
-                history.current_days,
-                {day: set(values) for day, values in values_by_day.items()},
-            ),
+            current,
+            _per_meter(current, values_by_day).values(),
         )
         _LOGGER.debug(
             "Current season started %s, previous season has %d days",

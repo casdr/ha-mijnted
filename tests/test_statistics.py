@@ -13,7 +13,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
-from custom_components.mijnted.models import Meter
+from custom_components.mijnted.models import Meter, daily_changes
 from custom_components.mijnted.statistics import (
     async_import_meter_statistics,
     statistic_id,
@@ -142,3 +142,25 @@ async def test_season_reset_does_not_go_negative(hass: HomeAssistant) -> None:
     assert [state for state, _ in result.values()] == [487, 489, 0, 0, 2]
     assert [total for _, total in result.values()] == [0, 2, 2, 2, 4]
     assert min((await daily_change(hass)).values()) >= 0
+
+
+def test_small_drop_is_not_a_new_season() -> None:
+    """Test a correction or replaced meter adds nothing until the value is back."""
+    days = {
+        date(2026, 11, d): v for d, v in ((10, 300), (11, 299), (12, 300), (13, 304))
+    }
+    assert [change for *_, change in daily_changes(days, 295)] == [5, 0, 0, 4]
+    # A drop to about zero is a new season: the new value is the change.
+    reset = {date(2026, 6, 1): 489, date(2026, 6, 2): 3}
+    assert [change for *_, change in daily_changes(reset, 480)] == [9, 3]
+
+    replaced = Meter(
+        device_number=DEVICE,
+        residential_unit_id=1,
+        room_code=None,
+        unit_of_measure=None,
+        model=None,
+        last_readout=date(2026, 11, 11),
+        days={date(2026, 11, 10): 300, date(2026, 11, 11): 299},
+    )
+    assert replaced.readout_increase == 0

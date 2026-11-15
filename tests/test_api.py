@@ -68,12 +68,17 @@ class TokenEndpoint:
         """Start with no grants recorded."""
         self.grants: list[dict[str, Any]] = []
         self.refuse_refresh = False
+        self.refuse_code = False
 
     async def __call__(
         self, method: str, url: URL, data: Any
     ) -> AiohttpClientMockResponse:
         """Answer one token request."""
         self.grants.append(dict(data))
+        if data["grant_type"] == "authorization_code" and self.refuse_code:
+            return AiohttpClientMockResponse(
+                method, url, status=400, json={"error": "invalid_grant"}
+            )
         if data["grant_type"] == "authorization_code":
             body: dict[str, Any] = {
                 "refresh_token": "refresh-1",
@@ -272,6 +277,20 @@ async def test_refused_refresh_falls_back_to_sign_in(
 
     assert await client.async_get_residential_unit_ids() == [UNIT_ID]
     assert len(calls_to(mocker, "SelfAsserted")) == 2
+
+
+@pytest.mark.parametrize("refuse", ["refuse_code", "refuse_refresh"])
+async def test_refused_tokens_after_sign_in_are_not_a_bad_password(
+    client: MijntedClient,
+    mocker: AiohttpClientMocker,
+    token_endpoint: TokenEndpoint,
+    refuse: str,
+) -> None:
+    """Test token refusals right after accepted credentials do not ask to reauth."""
+    mock_sign_in(mocker, token_endpoint)
+    setattr(token_endpoint, refuse, True)
+    with pytest.raises(MijntedUnexpectedPageError):
+        await client.async_sign_in()
 
 
 async def test_rejected_api_token_is_dropped(

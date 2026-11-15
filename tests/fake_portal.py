@@ -59,6 +59,9 @@ class FakePortal:
         self.fetched_days: list[date] = []
         self.backfill_days: list[date] = []
         self.sign_ins = 0
+        self.updates = 0
+        # (day, device) pairs the export leaves out, as when a reading is late.
+        self.missing: set[tuple[date, str]] = set()
         self.account_id: str | None = ACCOUNT_ID
 
     @property
@@ -82,7 +85,8 @@ class FakePortal:
         return ACCOUNT_ID
 
     async def async_get_residential_unit_ids(self) -> list[int]:
-        """Return the one residential unit."""
+        """Return the one residential unit; each coordinator update starts here."""
+        self.updates += 1
         self._check()
         return [UNIT_ID]
 
@@ -150,6 +154,6 @@ class FakePortal:
                 for d, values in self.values.items()
                 if d <= day and device in values
             ]
-            if earlier:
+            if earlier and (day, device) not in self.missing:
                 result[device] = max(earlier)[1]
         return result
