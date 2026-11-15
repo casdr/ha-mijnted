@@ -31,7 +31,11 @@ from .const import (
 )
 from .models import Meter, MijntedData, ResidentialUnitInfo
 from .season_tracker import SeasonTracker
-from .statistics import async_import_meter_statistics
+from .statistics import (
+    async_import_household,
+    async_import_meter_statistics,
+    household_statistic_id,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -129,7 +133,15 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
         ir.async_delete_issue(
             self.hass, DOMAIN, f"{ISSUE_UNEXPECTED_PAGE}_{self.config_entry.entry_id}"
         )
-        await async_import_meter_statistics(self.hass, list(data.meters.values()))
+        await async_import_meter_statistics(
+            self.hass, list(data.meters.values()), self.config_entry.entry_id
+        )
+        for unit_id, totals in data.totals.items():
+            await async_import_household(
+                self.hass,
+                household_statistic_id(unit_id, only_unit=len(data.units) == 1),
+                totals,
+            )
         await self.seasons.async_update(data.units, data.totals)
         return data
 
@@ -198,7 +210,10 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
     ) -> dict[date, float]:
         """Fetch the per-day values from the window start up to the last readout.
 
-        Returns the household total per day.
+        Returns the household total per day: the sum over the unit's meters, for
+        days on which every meter has a value. A day that some meter still lacks
+        (lag, weekend) is left out, so the total never shows a day too low. Meters
+        without any value in the window, such as removed ones, do not count.
         """
         readouts = [
             meter.last_readout for meter in meters.values() if meter.last_readout
@@ -213,14 +228,17 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
         values_by_day = await self._async_values_by_day(
             billing_unit_id, unit_id, wanted, last_readout
         )
-        totals: dict[date, float] = {}
         for day in wanted:
             for device_number, value in values_by_day.get(day, {}).items():
                 meter = meters.get(device_number)
                 if meter and meter.last_readout and day <= meter.last_readout:
                     meter.days[day] = value
-                    totals[day] = totals.get(day, 0.0) + value
-        return totals
+        counting = [meter for meter in meters.values() if meter.days]
+        return {
+            day: sum(meter.days[day] for meter in counting)
+            for day in wanted
+            if counting and all(day in meter.days for meter in counting)
+        }
 
     async def _async_values_by_day(
         self, billing_unit_id: int, unit_id: int, wanted: list[date], last_readout: date

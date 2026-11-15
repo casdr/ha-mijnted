@@ -14,8 +14,10 @@ day each value belongs to.
     (`state_class: total_increasing`).
   - **Last readout**: units added on the last day Techem read the meters out. The
     `readout_date` attribute gives that date.
-- An external statistic per meter, `mijnted:meter_<device number>`, with one value per
-  day for the last 30 days, each on its own date.
+- An external statistic per meter, `mijnted:meter_<device number>`, and one for the
+  household, `mijnted:total`, with one value per day, each on its own date. A meter's
+  statistic is named after its device, so renaming the device in Home Assistant
+  renames the statistic at the next update.
 
 ## Installation
 
@@ -40,29 +42,34 @@ Each apartment gets two sensors:
   one year earlier (`state_class: total`). It moves on at midnight.
 - **Previous season total**: the previous season's final total.
 
-The statistic `mijnted:total_previous_season` holds the previous season's household
-total (all meters added up), moved forward one calendar year: on 15 November 2026 it
-shows the value of 15 November 2025. It covers the whole previous season, including
-the dates still to come, so a graph shows where last year ended up. 29 February is
-counted on 28 February. Accounts with more than one apartment get the apartment's id
-appended, for example `mijnted:total_previous_season_153865`.
+Two statistics hold the household total (all meters added up), one value per day:
+
+- `mijnted:total` ("mijnTED total"): this season, from its first day up to the last
+  readout. A day counts only once every meter has a value for it, so a day still
+  waiting for one meter never shows too low.
+- `mijnted:total_previous_season`: the previous season, moved forward one calendar
+  year: on 15 November 2026 it shows the value of 15 November 2025. It covers the
+  whole previous season, including the dates still to come, so a graph shows where
+  last year ended up. 29 February is counted on 28 February.
+
+Accounts with more than one apartment get the apartment's id appended, for example
+`mijnted:total_153865`.
 
 ```yaml
 type: statistics-graph
-title: Last season, a year later
+title: This season and last season
 period: day
+chart_type: line
 stat_types:
   - state
 entities:
+  - mijnted:total
   - mijnted:total_previous_season
 ```
 
-The previous season is a household total. This season is available per meter
-(`mijnted:meter_…`), not yet as a household total.
-
 Seasons are found from the data: a season ends where the household total drops back
-to about zero (the meters reset in early June, not on a fixed date). The previous
-season is fetched once, in the background at two requests per second, which takes a
+to about zero (the meters reset in early June, not on a fixed date). Both
+seasons are fetched once, in the background at two requests per second, which takes a
 few minutes, and kept in Home Assistant's storage, so a restart does not fetch it
 again. When a new season starts, the season that just ended becomes the previous
 season and is fetched once.
@@ -83,9 +90,10 @@ entities:
   - mijnted:meter_90000001
 ```
 
-Use the `mijnted:meter_…` statistic, not the Season total sensor. The sensor's own
-long-term statistics are dated when Home Assistant fetched the value, which is a day or
-more after the actual readout. The external statistic is dated on the readout day.
+Use the `mijnted:meter_…` or `mijnted:total` statistic, not the Season total sensor.
+The sensor's own long-term statistics are dated when Home Assistant fetched the value,
+which is a day or more after the actual readout. The external statistics are dated on
+the readout day.
 
 ## Options
 

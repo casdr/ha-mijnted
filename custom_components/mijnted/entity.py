@@ -63,8 +63,9 @@ class MijntedMeterEntity(CoordinatorEntity[MijntedCoordinator]):
             serial_number=device_number,
             suggested_area=rooms.get(meter.room_code or "", meter.room_code),
         )
-        unit_device = dr.async_get(coordinator.hass).async_get_device(
-            identifiers={unit_device_identifier(meter.residential_unit_id)}
+        unit_device = dr.async_get(coordinator.hass).async_get_device_by_identifier(
+            unit_device_identifier(meter.residential_unit_id),
+            coordinator.config_entry.entry_id,
         )
         if unit_device:
             self._attr_device_info["via_device_id"] = unit_device.id

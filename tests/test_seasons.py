@@ -57,9 +57,10 @@ async def test_boundaries_from_a_reset_in_june() -> None:
     assert previous.end == date(2026, 6, 1)
     assert previous.final_total == 489
     assert previous.days == PREVIOUS
-    # The current season is sampled weekly, so far fewer days are asked than exist.
-    assert len(set(portal.asked)) < len(PREVIOUS) + len(CURRENT) // 2
+    assert history.current_days == CURRENT
+    # Every day of both seasons once, plus the day before them that ends the search.
     assert len(portal.asked) == len(set(portal.asked))
+    assert set(portal.asked) == set(PREVIOUS) | set(CURRENT) | {date(2025, 6, 1)}
 
 
 async def test_replaced_meter_is_not_a_new_season() -> None:

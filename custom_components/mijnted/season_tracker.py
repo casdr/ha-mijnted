@@ -19,7 +19,12 @@ from homeassistant.helpers.storage import Store
 from .api import MijntedError
 from .const import DOMAIN
 from .seasons import SeasonHistory, async_find_seasons, is_reset, reset_after
-from .statistics import async_import_previous_season, previous_season_statistic_id
+from .statistics import (
+    async_import_household,
+    async_import_previous_season,
+    household_statistic_id,
+    previous_season_statistic_id,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,6 +48,18 @@ SAVE_DELAY = 60
 def store_key(entry_id: str) -> str:
     """Storage key of a config entry's seasons."""
     return f"{DOMAIN}.{entry_id}.seasons"
+
+
+def _complete_days(
+    totals: dict[date, float], meters_by_day: dict[date, set[str]]
+) -> dict[date, float]:
+    """Keep the days on which every meter seen in these days has a value."""
+    meters = set().union(*(meters_by_day.get(day, set()) for day in totals))
+    return {
+        day: total
+        for day, total in totals.items()
+        if meters <= meters_by_day.get(day, set())
+    }
 
 
 class SeasonTracker:
@@ -146,12 +163,14 @@ class SeasonTracker:
         units: dict[int, ResidentialUnitInfo],
     ) -> None:
         """Find the seasons of a unit and fetch the previous one, throttled."""
+        meters_by_day: dict[date, set[str]] = {}
 
         async def fetch(day: date) -> float | None:
             await asyncio.sleep(BACKFILL_DELAY)
             values = await self._client.async_get_day_values(
                 billing_unit_id, unit_id, day
             )
+            meters_by_day[day] = set(values)
             return sum(values.values()) if values else None
 
         _LOGGER.debug("Fetching the previous season")
@@ -171,6 +190,11 @@ class SeasonTracker:
         self._imported.discard(unit_id)
         if history.previous:
             await self._async_import(unit_id, units)
+        await async_import_household(
+            self._hass,
+            household_statistic_id(unit_id, only_unit=len(units) == 1),
+            _complete_days(history.current_days, meters_by_day),
+        )
         _LOGGER.debug(
             "Current season started %s, previous season has %d days",
             history.current_start,

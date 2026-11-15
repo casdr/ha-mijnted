@@ -9,12 +9,12 @@ the values themselves. Nothing here uses Home Assistant.
 from __future__ import annotations
 
 import itertools
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
 
     type TotalFetcher = Callable[[date], Awaitable[float | None]]
 
@@ -105,10 +105,15 @@ class PreviousSeason:
 
 @dataclass(slots=True)
 class SeasonHistory:
-    """Where the current season started, and the season before it if known."""
+    """Where the current season started, and the season before it if known.
+
+    `current_days` holds the current season's totals as fetched; they go into the
+    recorder once and are not stored with the rest.
+    """
 
     current_start: date | None
     previous: PreviousSeason | None
+    current_days: dict[date, float] = field(default_factory=dict, compare=False)
 
     def as_dict(self) -> dict[str, Any]:
         """Serialise for storage."""
@@ -130,7 +135,7 @@ class SeasonHistory:
         )
 
 
-def reset_after(totals: dict[date, float], after: date | None) -> date | None:
+def reset_after(totals: Mapping[date, float], after: date | None) -> date | None:
     """Return the newest day in `totals` on which a season started after `after`."""
     found = None
     days = sorted(totals)
@@ -208,7 +213,7 @@ async def _fetch_previous(
 async def async_find_seasons(
     fetch: TotalFetcher, latest: date, max_days: int = MAX_SCAN_DAYS
 ) -> SeasonHistory:
-    """Find the start of the current season and fetch the previous season.
+    """Find the start of the current season and fetch it and the previous season.
 
     `fetch` returns the household total of one day, or None without data. `latest` is
     the newest day with a real readout.
@@ -219,4 +224,12 @@ async def async_find_seasons(
     if current_start is None:
         return SeasonHistory(current_start=None, previous=None)
     previous = await _fetch_previous(totals, current_start, earliest)
-    return SeasonHistory(current_start=current_start, previous=previous)
+    current_days: dict[date, float] = {}
+    day = current_start
+    while day <= latest:
+        if (value := await totals.get(day)) is not None:
+            current_days[day] = value
+        day += timedelta(days=1)
+    return SeasonHistory(
+        current_start=current_start, previous=previous, current_days=current_days
+    )

@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.usefixtures("amsterdam")
 
 STAT_ID = "mijnted:total_previous_season"
+CURRENT_ID = "mijnted:total"
 
 
 def ramp(first: date, last: date, final: float) -> dict[date, float]:
@@ -42,26 +43,28 @@ def ramp(first: date, last: date, final: float) -> dict[date, float]:
     }
 
 
-def _query(hass: HomeAssistant) -> dict[date, dict[str, Any]]:
+def _query(hass: HomeAssistant, stat_id: str) -> dict[date, dict[str, Any]]:
     result = statistics_during_period(
         hass,
         dt_util.start_of_local_day(date(2024, 1, 1)),
         None,
-        {STAT_ID},
+        {stat_id},
         "hour",
         None,
         {"state", "sum"},
     )
     return {
         dt_util.as_local(dt_util.utc_from_timestamp(row["start"])).date(): dict(row)
-        for row in result.get(STAT_ID, [])
+        for row in result.get(stat_id, [])
     }
 
 
-async def stat_rows(hass: HomeAssistant) -> dict[date, dict[str, Any]]:
-    """Return the previous-season statistic's rows by local day."""
+async def stat_rows(
+    hass: HomeAssistant, stat_id: str = STAT_ID
+) -> dict[date, dict[str, Any]]:
+    """Return a statistic's rows by local day, the previous season's by default."""
     await async_wait_recording_done(hass)
-    return await hass.async_add_executor_job(partial(_query, hass))
+    return await hass.async_add_executor_job(partial(_query, hass, stat_id))
 
 
 def season(first: date, last: date, final: float) -> PreviousSeason:
@@ -89,6 +92,16 @@ async def test_statistic_import_is_idempotent(hass: HomeAssistant) -> None:
     await async_import_previous_season(hass, STAT_ID, previous)
     await async_import_previous_season(hass, STAT_ID, previous)
     assert await stat_rows(hass) == first
+
+
+async def test_back_to_back_imports_continue_the_sum(hass: HomeAssistant) -> None:
+    """Test a second import right after the first, before the recorder wrote it."""
+    first = season(date(2024, 6, 2), date(2025, 6, 1), 400)
+    second = season(date(2025, 6, 2), date(2026, 6, 1), 489)
+    await async_import_previous_season(hass, STAT_ID, first)
+    await async_import_previous_season(hass, STAT_ID, second)
+    rows = await stat_rows(hass)
+    assert rows[date(2027, 6, 1)]["sum"] == 400 + 489
 
 
 async def test_statistic_rollover_keeps_the_sum_going(hass: HomeAssistant) -> None:
@@ -155,6 +168,15 @@ async def test_sensors_after_backfill(
 
     rows = await stat_rows(hass)
     assert rows[date(2026, 11, 15)]["state"] == expected[date(2025, 11, 15)]
+
+    # This season's household total from its first day, next to last season's.
+    current = await stat_rows(hass, CURRENT_ID)
+    assert min(current) == date(2026, 6, 2)
+    assert max(current) == date(2026, 11, 13)
+    assert current[date(2026, 11, 13)]["state"] == 22
+    sums = [current[day]["sum"] for day in sorted(current)]
+    assert sums == sorted(sums)
+    assert sums[-1] == 22
 
     # At midnight the to-date value moves on a day without a portal update.
     at(freezer, "2026-11-16 00:00:06")
