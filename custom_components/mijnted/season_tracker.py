@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.storage import Store
 
-from .api import MijntedError
+from .api import MijntedConnectionError, MijntedError
 from .const import DOMAIN
 from .seasons import SeasonHistory, async_find_seasons, is_new_season, reset_after
 from .statistics import (
@@ -42,6 +42,10 @@ _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 # Pause before each request of the backfill: at most two requests per second.
 BACKFILL_DELAY = 0.5
+# A request that fails with a connection error is tried this often in all, with
+# BACKFILL_RETRY_DELAY seconds more before each next try.
+BACKFILL_ATTEMPTS = 3
+BACKFILL_RETRY_DELAY = 10
 # Write the last seen totals at most this often (seconds).
 SAVE_DELAY = 60
 
@@ -183,9 +187,7 @@ class SeasonTracker:
 
         async def fetch(day: date) -> float | None:
             await asyncio.sleep(BACKFILL_DELAY)
-            values = await self._client.async_get_day_values(
-                billing_unit_id, unit_id, day
-            )
+            values = await self._async_day_values(billing_unit_id, unit_id, day)
             values_by_day[day] = values
             return sum(values.values()) if values else None
 
@@ -224,6 +226,25 @@ class SeasonTracker:
             len(history.previous.days) if history.previous else 0,
         )
         self._on_change()
+
+    async def _async_day_values(
+        self, billing_unit_id: int, unit_id: int, day: date
+    ) -> dict[str, float]:
+        """Fetch one day's export, trying again after a connection error.
+
+        One timeout among the backfill's hundreds of requests would otherwise end
+        the whole backfill until the next update, hours later.
+        """
+        for attempt in range(1, BACKFILL_ATTEMPTS):
+            try:
+                return await self._client.async_get_day_values(
+                    billing_unit_id, unit_id, day
+                )
+            except MijntedConnectionError as err:
+                # Messages hold only a step, HTTP status or exception type.
+                _LOGGER.debug("Backfill request failed, trying again: %s", err)
+                await asyncio.sleep(BACKFILL_RETRY_DELAY * attempt)
+        return await self._client.async_get_day_values(billing_unit_id, unit_id, day)
 
     async def _async_import(
         self, unit_id: int, units: dict[int, ResidentialUnitInfo]

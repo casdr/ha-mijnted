@@ -60,7 +60,10 @@ async def amsterdam_fixture(hass: Any) -> None:
 @pytest.fixture(autouse=True)
 def no_backfill_delay() -> Generator[None]:
     """Run the previous-season backfill without its pause between requests."""
-    with patch("custom_components.mijnted.season_tracker.BACKFILL_DELAY", 0):
+    with (
+        patch("custom_components.mijnted.season_tracker.BACKFILL_DELAY", 0),
+        patch("custom_components.mijnted.season_tracker.BACKFILL_RETRY_DELAY", 0),
+    ):
         yield
 
 

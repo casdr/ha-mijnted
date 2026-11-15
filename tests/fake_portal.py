@@ -62,6 +62,8 @@ class FakePortal:
         self.updates = 0
         # (day, device) pairs the export leaves out, as when a reading is late.
         self.missing: set[tuple[date, str]] = set()
+        # Errors the backfill's day requests raise, one per request, before answering.
+        self.backfill_errors: list[MijntedError] = []
         self.account_id: str | None = ACCOUNT_ID
 
     @property
@@ -136,6 +138,8 @@ class FakePortal:
     ) -> dict[str, float]:
         """Return the export of one day, as the previous-season backfill asks."""
         self._check()
+        if self.backfill_errors:
+            raise self.backfill_errors.pop(0)
         self.backfill_days.append(day)
         return self._export(day)
 

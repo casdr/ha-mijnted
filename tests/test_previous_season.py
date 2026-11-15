@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
+from custom_components.mijnted.api import MijntedConnectionError
 from custom_components.mijnted.const import DOMAIN
 from custom_components.mijnted.seasons import PreviousSeason
 from custom_components.mijnted.statistics import async_import_previous_season
@@ -243,9 +244,12 @@ async def test_season_stored_without_meters_is_fetched_again(
     }
     await setup_with_history(hass, freezer, portal, config_entry)
 
+    # Fetched during setup, without waiting for a coordinator update.
     assert portal.backfill_days
     meter = state(hass, portal.devices[0], "previous_season_to_date")
     assert meter.state != "unknown"
+    rows = await stat_rows(hass, f"mijnted:meter_{portal.devices[0]}_previous_season")
+    assert rows[date(2027, 6, 1)]["state"] == 489
     stored = hass_storage[f"{DOMAIN}.{config_entry.entry_id}.seasons"]["data"]
     assert portal.devices[0] in stored["units"]["100001"]["previous"]["meters"]
 
@@ -323,3 +327,20 @@ async def test_dips_after_the_start_do_not_fetch_again(
     await refresh(hass, config_entry)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert portal.backfill_days == []
+
+
+@pytest.mark.usefixtures("mock_client")
+async def test_backfill_survives_a_failed_request(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    portal: FakePortal,
+    config_entry: MockConfigEntry,
+) -> None:
+    """Test a timeout among the backfill's hundreds of requests is retried."""
+    portal.backfill_errors = [
+        MijntedConnectionError("ServerTimeoutError"),
+        MijntedConnectionError("ServerTimeoutError"),
+    ]
+    await setup_with_history(hass, freezer, portal, config_entry)
+    assert not portal.backfill_errors
+    assert float(unit_state(hass, "previous_season_total").state) == 489
