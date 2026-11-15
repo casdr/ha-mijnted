@@ -8,11 +8,29 @@ from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from homeassistant.core import HomeAssistant
 
     from .coordinator import MijntedConfigEntry
+    from .seasons import PreviousSeason
 
 TO_REDACT = {CONF_EMAIL, CONF_PASSWORD, "title", "unique_id"}
+
+
+def _iso(day: date | None) -> str | None:
+    return day.isoformat() if day else None
+
+
+def _previous_summary(previous: PreviousSeason | None) -> dict[str, Any] | None:
+    if previous is None:
+        return None
+    return {
+        "start": previous.start.isoformat(),
+        "end": previous.end.isoformat(),
+        "days": len(previous.days),
+        "final_total": previous.final_total,
+    }
 
 
 async def async_get_config_entry_diagnostics(
@@ -47,6 +65,13 @@ async def async_get_config_entry_diagnostics(
                 "billing_unit_id": REDACTED,
                 "apartment_no": REDACTED,
                 "model": unit.model,
+                "current_season_start": _iso(
+                    coordinator.seasons.current_start(unit.id)
+                ),
+                "previous_season": _previous_summary(
+                    coordinator.seasons.previous(unit.id)
+                ),
+                "backfilling": coordinator.seasons.backfilling,
             }
             for unit in data.units.values()
         ],

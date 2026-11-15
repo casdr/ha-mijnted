@@ -74,6 +74,8 @@ class MijntedData:
 
     units: dict[int, ResidentialUnitInfo] = field(default_factory=dict)
     meters: dict[str, Meter] = field(default_factory=dict)
+    # Household total per day (all meters added up) up to the last readout, per unit.
+    totals: dict[int, dict[date, float]] = field(default_factory=dict)
 
 
 def daily_changes(

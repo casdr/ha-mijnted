@@ -32,6 +32,41 @@ day each value belongs to.
 Copy `custom_components/mijnted` into the `custom_components` folder of your Home
 Assistant configuration, restart, and add the integration as above.
 
+## Comparing with the previous season
+
+Each apartment gets two sensors:
+
+- **Previous season to date**: units the previous season had counted on today's date
+  one year earlier (`state_class: total`). It moves on at midnight.
+- **Previous season total**: the previous season's final total.
+
+The statistic `mijnted:total_previous_season` holds the previous season's household
+total (all meters added up), moved forward one calendar year: on 15 November 2026 it
+shows the value of 15 November 2025. It covers the whole previous season, including
+the dates still to come, so a graph shows where last year ended up. 29 February is
+counted on 28 February. Accounts with more than one apartment get the apartment's id
+appended, for example `mijnted:total_previous_season_153865`.
+
+```yaml
+type: statistics-graph
+title: Last season, a year later
+period: day
+stat_types:
+  - state
+entities:
+  - mijnted:total_previous_season
+```
+
+The previous season is a household total. This season is available per meter
+(`mijnted:meter_…`), not yet as a household total.
+
+Seasons are found from the data: a season ends where the household total drops back
+to about zero (the meters reset in early June, not on a fixed date). The previous
+season is fetched once, in the background at two requests per second, which takes a
+few minutes, and kept in Home Assistant's storage, so a restart does not fetch it
+again. When a new season starts, the season that just ended becomes the previous
+season and is fetched once.
+
 ## Showing units per day
 
 Heat cost allocator units are not energy, so the Energy dashboard does not accept them.

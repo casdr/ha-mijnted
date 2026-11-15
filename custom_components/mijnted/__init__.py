@@ -8,12 +8,14 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .api import MijntedClient, create_cookie_jar
 from .const import MANUFACTURER
 from .coordinator import MijntedConfigEntry, MijntedCoordinator
 from .entity import unit_device_identifier
+from .season_tracker import STORE_VERSION, store_key
 
 if TYPE_CHECKING:
     from .models import ResidentialUnitInfo
@@ -56,6 +58,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: MijntedConfigEntry) -> b
 
 def _unit_name(unit: ResidentialUnitInfo) -> str:
     return f"mijnTED {unit.apartment_no or unit.id}"
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: MijntedConfigEntry) -> None:
+    """Delete the stored seasons when the entry is removed."""
+    await Store[dict[str, object]](
+        hass, STORE_VERSION, store_key(entry.entry_id)
+    ).async_remove()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: MijntedConfigEntry) -> bool:

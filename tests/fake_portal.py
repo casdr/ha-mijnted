@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +57,7 @@ class FakePortal:
         self.export_active = True
         self.fail_with: MijntedError | None = None
         self.fetched_days: list[date] = []
+        self.backfill_days: list[date] = []
         self.sign_ins = 0
         self.account_id: str | None = ACCOUNT_ID
 
@@ -125,6 +126,20 @@ class FakePortal:
         self._check()
         self.fetched_days.extend(days)
         return {day: self._export(day) for day in days}
+
+    async def async_get_day_values(
+        self, _billing_unit_id: int, _unit_id: int, day: date
+    ) -> dict[str, float]:
+        """Return the export of one day, as the previous-season backfill asks."""
+        self._check()
+        self.backfill_days.append(day)
+        return self._export(day)
+
+    def fill_ramp(self, first: date, last: date, final: float) -> None:
+        """Let the first meter count up evenly from 0 on `first` to `final`."""
+        days = (last - first).days
+        for offset in range(days + 1):
+            self.set_day(first + timedelta(days=offset), round(final * offset / days))
 
     def _export(self, day: date) -> dict[str, float]:
         """Export a day: a day without its own value repeats the newest earlier one."""

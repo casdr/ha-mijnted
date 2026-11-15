@@ -68,15 +68,48 @@
       "cumulative": {
         "name": "Season total",
         "state_attributes": {
-          "last_readout_date": { "name": "Last readout date" },
-          "statistic_id": { "name": "Statistic ID" }
+          "last_readout_date": {
+            "name": "Last readout date"
+          },
+          "statistic_id": {
+            "name": "Statistic ID"
+          }
         }
       },
       "last_readout": {
         "name": "Last readout",
         "state_attributes": {
-          "readout_date": { "name": "Readout date" },
-          "cumulative": { "name": "Season total" }
+          "readout_date": {
+            "name": "Readout date"
+          },
+          "cumulative": {
+            "name": "Season total"
+          }
+        }
+      },
+      "previous_season_to_date": {
+        "name": "Previous season to date",
+        "state_attributes": {
+          "comparison_date": {
+            "name": "Compared date"
+          },
+          "season_start": {
+            "name": "Season start"
+          },
+          "season_end": {
+            "name": "Season end"
+          }
+        }
+      },
+      "previous_season_total": {
+        "name": "Previous season total",
+        "state_attributes": {
+          "season_start": {
+            "name": "Season start"
+          },
+          "season_end": {
+            "name": "Season end"
+          }
         }
       }
     }

@@ -80,6 +80,55 @@ class MijntedMeterEntity(CoordinatorEntity[MijntedCoordinator]):
         return super().available and self.meter is not None
 
 
+class MijntedUnitEntity(CoordinatorEntity[MijntedCoordinator]):
+    """An entity of a residential unit (apartment), on the unit's device."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator: MijntedCoordinator, unit_id: int, key: str) -> None:
+        """Initialize the entity.
+
+        Args:
+        ----
+            coordinator: The coordinator.
+            unit_id: The residential unit's id in the portal.
+            key: Added to the unique ID, to tell the unit's entities apart.
+
+        """
+        super().__init__(coordinator)
+        self._unit_id = unit_id
+        self._attr_unique_id = f"unit_{unit_id}_{key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={unit_device_identifier(unit_id)}
+        )
+
+    @property
+    def available(self) -> bool:
+        """Available while the last update succeeded and still lists this unit."""
+        return super().available and self._unit_id in self.coordinator.data.units
+
+
+def async_add_unit_entities(
+    entry: MijntedConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+    create: Callable[[MijntedCoordinator, int], Iterable[Entity]],
+) -> None:
+    """Add entities for every residential unit now, and for units that appear later."""
+    coordinator = entry.runtime_data
+    known: set[int] = set()
+
+    @callback
+    def add_new_units() -> None:
+        new = [unit_id for unit_id in coordinator.data.units if unit_id not in known]
+        known.update(new)
+        async_add_entities(
+            entity for unit_id in new for entity in create(coordinator, unit_id)
+        )
+
+    add_new_units()
+    entry.async_on_unload(coordinator.async_add_listener(add_new_units))
+
+
 def async_add_meter_entities(
     entry: MijntedConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,

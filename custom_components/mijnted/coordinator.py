@@ -30,6 +30,7 @@ from .const import (
     MAX_BACKOFF,
 )
 from .models import Meter, MijntedData, ResidentialUnitInfo
+from .season_tracker import SeasonTracker
 from .statistics import async_import_meter_statistics
 
 if TYPE_CHECKING:
@@ -79,6 +80,7 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
         # Per residential unit: days before the last readout. Those values are final, so
         # they are fetched once and kept for as long as they stay in the history window.
         self._final_days: dict[int, dict[date, dict[str, float]]] = {}
+        self.seasons = SeasonTracker(hass, entry, client, self.async_update_listeners)
 
     async def _async_update_data(self) -> MijntedData:
         try:
@@ -128,6 +130,7 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
             self.hass, DOMAIN, f"{ISSUE_UNEXPECTED_PAGE}_{self.config_entry.entry_id}"
         )
         await async_import_meter_statistics(self.hass, list(data.meters.values()))
+        await self.seasons.async_update(data.units, data.totals)
         return data
 
     async def _async_fetch(self) -> MijntedData:
@@ -184,32 +187,40 @@ class MijntedCoordinator(DataUpdateCoordinator[MijntedData]):
                         last_readout=readout,
                     )
 
-            await self._async_fill_days(unit.billing_unit_id, unit_id, meters, today)
+            data.totals[unit_id] = await self._async_fill_days(
+                unit.billing_unit_id, unit_id, meters, today
+            )
             data.meters.update(meters)
         return data
 
     async def _async_fill_days(
         self, billing_unit_id: int, unit_id: int, meters: dict[str, Meter], today: date
-    ) -> None:
-        """Fetch the per-day values from the window start up to the last readout."""
+    ) -> dict[date, float]:
+        """Fetch the per-day values from the window start up to the last readout.
+
+        Returns the household total per day.
+        """
         readouts = [
             meter.last_readout for meter in meters.values() if meter.last_readout
         ]
         if not readouts:
-            return
+            return {}
         last_readout = max(readouts)
         window_start = today - timedelta(days=HISTORY_DAYS)
         wanted = _days_between(window_start, last_readout)
         if not wanted:
-            return
+            return {}
         values_by_day = await self._async_values_by_day(
             billing_unit_id, unit_id, wanted, last_readout
         )
+        totals: dict[date, float] = {}
         for day in wanted:
             for device_number, value in values_by_day.get(day, {}).items():
                 meter = meters.get(device_number)
                 if meter and meter.last_readout and day <= meter.last_readout:
                     meter.days[day] = value
+                    totals[day] = totals.get(day, 0.0) + value
+        return totals
 
     async def _async_values_by_day(
         self, billing_unit_id: int, unit_id: int, wanted: list[date], last_readout: date

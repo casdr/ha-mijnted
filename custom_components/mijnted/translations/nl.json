@@ -68,15 +68,48 @@
       "cumulative": {
         "name": "Seizoenstotaal",
         "state_attributes": {
-          "last_readout_date": { "name": "Laatste uitleesdatum" },
-          "statistic_id": { "name": "Statistiek-ID" }
+          "last_readout_date": {
+            "name": "Laatste uitleesdatum"
+          },
+          "statistic_id": {
+            "name": "Statistiek-ID"
+          }
         }
       },
       "last_readout": {
         "name": "Laatste uitlezing",
         "state_attributes": {
-          "readout_date": { "name": "Uitleesdatum" },
-          "cumulative": { "name": "Seizoenstotaal" }
+          "readout_date": {
+            "name": "Uitleesdatum"
+          },
+          "cumulative": {
+            "name": "Seizoenstotaal"
+          }
+        }
+      },
+      "previous_season_to_date": {
+        "name": "Vorig seizoen tot nu",
+        "state_attributes": {
+          "comparison_date": {
+            "name": "Vergeleken datum"
+          },
+          "season_start": {
+            "name": "Begin seizoen"
+          },
+          "season_end": {
+            "name": "Einde seizoen"
+          }
+        }
+      },
+      "previous_season_total": {
+        "name": "Vorig seizoen totaal",
+        "state_attributes": {
+          "season_start": {
+            "name": "Begin seizoen"
+          },
+          "season_end": {
+            "name": "Einde seizoen"
+          }
         }
       }
     }

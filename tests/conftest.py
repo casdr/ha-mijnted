@@ -57,6 +57,13 @@ async def amsterdam_fixture(hass: Any) -> None:
     await hass.config.async_set_time_zone("Europe/Amsterdam")
 
 
+@pytest.fixture(autouse=True)
+def no_backfill_delay() -> Generator[None]:
+    """Run the previous-season backfill without its pause between requests."""
+    with patch("custom_components.mijnted.season_tracker.BACKFILL_DELAY", 0):
+        yield
+
+
 @pytest.fixture(name="portal")
 def portal_fixture() -> FakePortal:
     """Return a fake portal with no values yet."""

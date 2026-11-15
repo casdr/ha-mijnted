@@ -1,8 +1,18 @@
 {
   "entity": {
     "sensor": {
-      "cumulative": { "default": "mdi:radiator" },
-      "last_readout": { "default": "mdi:calendar-check" }
+      "cumulative": {
+        "default": "mdi:radiator"
+      },
+      "last_readout": {
+        "default": "mdi:calendar-check"
+      },
+      "previous_season_to_date": {
+        "default": "mdi:calendar-sync"
+      },
+      "previous_season_total": {
+        "default": "mdi:history"
+      }
     }
   }
 }
