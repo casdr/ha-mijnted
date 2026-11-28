@@ -1,6 +1,7 @@
 {
   "domain": "mijnted",
   "name": "mijnTED (Techem)",
+  "categories": ["energy.meters_monitoring"],
   "codeowners": ["@casdr"],
   "config_flow": true,
   "dependencies": ["recorder"],
